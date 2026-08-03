@@ -1,0 +1,10 @@
+{
+  "_comment": "Copy this file to config.json and fill it in. config.json stays on your machine.",
+
+  "apiKey": "PASTE_YOUR_INTERVALS_ICU_API_KEY_HERE",
+
+  "_athletes": "Start with just yourself. id 0 means 'me'. Add teammates once we know how coach access behaves.",
+  "athletes": [
+    { "id": "0", "name": "אני" }
+  ]
+}

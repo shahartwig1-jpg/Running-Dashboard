@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>דשבורד קבוצת ריצה — דמו</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:           #f9f9f7;
+    --surface-1:      #fcfcfb;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1: #2a78d6;
+    --series-2: #1baf7a;
+    --series-3: #eda100;
+    --series-4: #008300;
+    --series-5: #4a3aa7;
+    --series-6: #e34948;
+    --good:           #006300;
+    --bg-glow-1: rgba(42,120,214,0.10);
+    --bg-glow-2: rgba(27,175,122,0.09);
+    --bg-pattern: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNDAiIGhlaWdodD0iMjQwIj48ZyBmaWxsPSJub25lIiBzdHJva2U9IiMwMDAwMDAiIHN0cm9rZS13aWR0aD0iMS40IiBvcGFjaXR5PSIwLjA1Ij48cGF0aCBkPSJNLTIwIDQwIFEgNDAgMCAxMDAgNDAgVCAyNjAgNDAiLz48cGF0aCBkPSJNLTIwIDk1IFEgNDAgNTUgMTAwIDk1IFQgMjYwIDk1Ii8+PHBhdGggZD0iTS0yMCAxNTAgUSA0MCAxMTAgMTAwIDE1MCBUIDI2MCAxNTAiLz48cGF0aCBkPSJNLTIwIDIwNSBRIDQwIDE2NSAxMDAgMjA1IFQgMjYwIDIwNSIvPjwvZz48L3N2Zz4=");
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page:           #0d0d0d;
+      --surface-1:      #1a1a19;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --grid:           #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-1: #3987e5;
+      --series-2: #199e70;
+      --series-3: #c98500;
+      --series-4: #008300;
+      --series-5: #9085e9;
+      --series-6: #e66767;
+      --good:           #0ca30c;
+      --bg-glow-1: rgba(57,135,229,0.14);
+      --bg-glow-2: rgba(25,158,112,0.12);
+      --bg-pattern: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNDAiIGhlaWdodD0iMjQwIj48ZyBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMS40IiBvcGFjaXR5PSIwLjA2Ij48cGF0aCBkPSJNLTIwIDQwIFEgNDAgMCAxMDAgNDAgVCAyNjAgNDAiLz48cGF0aCBkPSJNLTIwIDk1IFEgNDAgNTUgMTAwIDk1IFQgMjYwIDk1Ii8+PHBhdGggZD0iTS0yMCAxNTAgUSA0MCAxMTAgMTAwIDE1MCBUIDI2MCAxNTAiLz48cGF0aCBkPSJNLTIwIDIwNSBRIDQwIDE2NSAxMDAgMjA1IFQgMjYwIDIwNSIvPjwvZz48L3N2Zz4=");
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:           #0d0d0d;
+    --surface-1:      #1a1a19;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --grid:           #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-1: #3987e5;
+    --series-2: #199e70;
+    --series-3: #c98500;
+    --series-4: #008300;
+    --series-5: #9085e9;
+    --series-6: #e66767;
+    --good:           #0ca30c;
+    --bg-glow-1: rgba(57,135,229,0.14);
+    --bg-glow-2: rgba(25,158,112,0.12);
+    --bg-pattern: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNDAiIGhlaWdodD0iMjQwIj48ZyBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMS40IiBvcGFjaXR5PSIwLjA2Ij48cGF0aCBkPSJNLTIwIDQwIFEgNDAgMCAxMDAgNDAgVCAyNjAgNDAiLz48cGF0aCBkPSJNLTIwIDk1IFEgNDAgNTUgMTAwIDk1IFQgMjYwIDk1Ii8+PHBhdGggZD0iTS0yMCAxNTAgUSA0MCAxMTAgMTAwIDE1MCBUIDI2MCAxNTAiLz48cGF0aCBkPSJNLTIwIDIwNSBRIDQwIDE2NSAxMDAgMjA1IFQgMjYwIDIwNSIvPjwvZz48L3N2Zz4=");
+  }
+
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background:
+      radial-gradient(1000px 520px at 8% -12%, var(--bg-glow-1), transparent 60%),
+      radial-gradient(900px 480px at 105% -5%, var(--bg-glow-2), transparent 55%),
+      var(--bg-pattern),
+      var(--page);
+    background-repeat: no-repeat, no-repeat, repeat, no-repeat;
+    background-attachment: fixed, fixed, fixed, fixed;
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 24px 20px 48px;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px; margin-bottom: 4px; }
+  h1 { font-size: 22px; font-weight: 700; }
+  .demo-badge {
+    font-size: 12px; color: var(--text-secondary);
+    border: 1px solid var(--border); border-radius: 999px;
+    padding: 3px 10px; background: var(--surface-1);
+  }
+  .subtitle { font-size: 13px; color: var(--text-muted); margin-bottom: 18px; }
+
+  .filters { display: flex; gap: 8px; margin-bottom: 18px; }
+  .filters button {
+    font: inherit; font-size: 13px; cursor: pointer;
+    color: var(--text-secondary);
+    background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 14px;
+  }
+  .filters button:hover { border-color: var(--baseline); }
+  .filters button[aria-pressed="true"] {
+    color: var(--text-primary); font-weight: 600;
+    border-color: var(--baseline);
+  }
+  .filters button[aria-pressed="true"]::before { content: "✓ "; font-weight: 700; }
+  .filters button .chip { vertical-align: -1px; margin-inline-end: 5px; }
+  .filters { flex-wrap: wrap; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .tile {
+    background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .tile .label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+  .tile .value { font-size: 26px; font-weight: 700; }
+  .tile .unit  { font-size: 13px; font-weight: 400; color: var(--text-secondary); margin-inline-start: 4px; }
+
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  .cards.single { grid-template-columns: 1fr; }
+  @media (max-width: 860px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px;
+  }
+  .card h2 { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+  .card .sub { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
+
+  /* Horizontal bar chart (HTML) */
+  .bar-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; cursor: default; }
+  .bar-name { flex: 0 0 64px; font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+  .chip { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+  .bar-track { flex: 1; height: 18px; position: relative; }
+  .bar-fill { position: absolute; inset-inline-start: 0; top: 0; height: 100%; border-start-end-radius: 4px; border-end-end-radius: 4px; min-width: 2px; }
+  .bar-val { flex: 0 0 74px; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+  .bar-row:hover .bar-track { outline: 2px solid var(--surface-1); }
+
+  svg text { font-family: inherit; }
+
+  /* Table */
+  .card table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .card th {
+    text-align: right; font-weight: 600; font-size: 12px; color: var(--text-muted);
+    padding: 6px 8px; border-bottom: 1px solid var(--baseline);
+  }
+  .card td { padding: 7px 8px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+  .card tr:last-child td { border-bottom: none; }
+  .runner-cell { display: inline-flex; align-items: center; gap: 7px; }
+  .device { color: var(--text-muted); font-size: 12px; }
+  #tbody tr { cursor: pointer; }
+  #tbody tr:hover td { background: var(--grid); }
+
+  /* Detail overlay */
+  #overlay {
+    position: fixed; inset: 0; z-index: 20; display: none;
+    background: rgba(11,11,11,0.45);
+  }
+  #overlay .sheet {
+    position: absolute; inset-inline-end: 0; top: 0; bottom: 0; width: min(560px, 100%);
+    background: var(--surface-1); border-inline-start: 1px solid var(--border);
+    padding: 20px; overflow-y: auto;
+  }
+  #overlay .sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+  #overlay h3 { font-size: 17px; font-weight: 700; }
+  #overlay .sheet-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
+  #overlay .close-btn {
+    font: inherit; font-size: 13px; cursor: pointer; color: var(--text-secondary);
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px;
+  }
+  #overlay .close-btn:hover { border-color: var(--baseline); }
+  #overlay .mini-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+  #overlay .mini-tile { background: var(--page); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
+  #overlay .mini-tile .label { font-size: 11px; color: var(--text-muted); }
+  #overlay .mini-tile .value { font-size: 16px; font-weight: 700; }
+  #overlay .section-title { font-size: 13px; font-weight: 600; margin: 18px 0 8px; }
+  #overlay .chart-note { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  #overlay table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  #overlay th { text-align: right; font-weight: 600; color: var(--text-muted); padding: 5px 6px; border-bottom: 1px solid var(--baseline); position: sticky; top: 0; background: var(--surface-1); }
+  #overlay td { padding: 5px 6px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+  #overlay .empty-note { font-size: 13px; color: var(--text-muted); padding: 20px 0; text-align: center; }
+
+  /* Tooltip */
+  #tooltip {
+    position: fixed; z-index: 10; pointer-events: none; display: none;
+    background: var(--surface-1); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    padding: 8px 12px; font-size: 12px; max-width: 240px;
+  }
+  #tooltip .t-title { font-weight: 600; margin-bottom: 4px; }
+  #tooltip .t-row { display: flex; align-items: center; gap: 6px; padding: 1px 0; color: var(--text-secondary); }
+  #tooltip .t-row b { color: var(--text-primary); font-weight: 600; margin-inline-start: auto; padding-inline-start: 10px; }
+
+  footer { margin-top: 22px; font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+  footer code { font-family: Consolas, monospace; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🏃 דשבורד קבוצת ריצה</h1>
+    <span class="demo-badge" id="badge">נתוני דמו</span>
+  </header>
+  <div class="subtitle" id="subtitle">חמישה מתאמנים · הנתונים מדמים את מה שיגיע מהשעונים אחרי חיבור אמיתי</div>
+
+  <div class="filters" role="group" aria-label="טווח זמן">
+    <button data-days="7"  aria-pressed="true">7 ימים אחרונים</button>
+    <button data-days="30" aria-pressed="false">30 ימים אחרונים</button>
+  </div>
+
+  <div class="filters" role="group" aria-label="מציג" id="runnerFilters"></div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="cards" id="cardsRow">
+    <div class="card" id="barCard">
+      <h2>ק״מ לפי רץ</h2>
+      <div class="sub" id="barSub"></div>
+      <div id="barChart"></div>
+    </div>
+    <div class="card">
+      <h2>ק״מ לפי יום בשבוע</h2>
+      <div class="sub" id="weekdaySub"></div>
+      <div dir="ltr" id="weekdayChart"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>פעילויות אחרונות</h2>
+    <div class="sub" id="tableSub"></div>
+    <table>
+      <thead>
+        <tr><th>תאריך</th><th>רץ</th><th>מרחק</th><th>זמן</th><th>קצב</th><th>דופק ממוצע</th><th>שעון</th></tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <footer>
+    הדשבורד מציג נתונים אמיתיים אם קיים הקובץ <code>data.json</code> (נוצר על ידי <code>node fetch-data.js</code>,
+    שמושך מ-Intervals.icu את הפעילויות שהגיעו מהשעונים), ואחרת חוזר לנתוני הדמו.
+  </footer>
+</div>
+
+<div id="tooltip"></div>
+
+<div id="overlay">
+  <div class="sheet" id="sheet"></div>
+</div>
+
+<script>
+"use strict";
+
+/* ---------- demo data: shaped like Garmin Activity API push payloads ---------- */
+
+function mulberry32(a) {
+  return function() {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const rand = mulberry32(42);
+const between = (lo, hi) => lo + rand() * (hi - lo);
+
+const DEMO_RUNNERS = [
+  { id: "u1", name: "יואב",  device: "Forerunner 965", weeklyKm: 58, paceSec: 275, hr: 148, runs: 5, slot: 1 },
+  { id: "u2", name: "מיכל",  device: "Fenix 8",        weeklyKm: 44, paceSec: 305, hr: 152, runs: 4, slot: 2 },
+  { id: "u3", name: "עומר",  device: "Forerunner 265", weeklyKm: 35, paceSec: 330, hr: 156, runs: 4, slot: 3 },
+  { id: "u4", name: "נועה",  device: "Instinct 3",     weeklyKm: 28, paceSec: 350, hr: 149, runs: 3, slot: 4 },
+  { id: "u5", name: "שחר",   device: "Forerunner 55",  weeklyKm: 20, paceSec: 385, hr: 161, runs: 3, slot: 5 },
+];
+const colorOf = r => getComputedStyle(document.documentElement).getPropertyValue("--series-" + r.slot).trim();
+
+const DAY = 86400000;
+const weekStart = d => { const x = new Date(d); x.setHours(0,0,0,0); x.setDate(x.getDate() - x.getDay()); return x; }; // Sunday
+
+/* Live state — swapped wholesale when data.json (real activities) loads. */
+let RUNNERS = DEMO_RUNNERS;
+let TODAY = new Date(2026, 6, 15, 12, 0, 0); // demo reference date
+let WEEKS = [];
+let ACTIVITIES = [];
+
+function computeWeeks() {
+  WEEKS = []; // oldest -> current
+  const cur = weekStart(TODAY);
+  for (let i = 7; i >= 0; i--) WEEKS.push(new Date(cur.getTime() - i * 7 * DAY));
+}
+
+function buildDemoActivities() {
+  const out = [];
+  RUNNERS.forEach(runner => {
+    WEEKS.forEach((ws, wi) => {
+      const weekFactor = between(0.75, 1.2) * (1 + 0.03 * wi * between(0, 1)); // mild build-up
+      const nRuns = Math.max(2, Math.round(runner.runs * between(0.8, 1.15)));
+      const kmTarget = runner.weeklyKm * weekFactor;
+      // pick distinct days in the week
+      const days = [...Array(7).keys()].sort(() => rand() - 0.5).slice(0, nRuns).sort();
+      let remaining = kmTarget;
+      days.forEach((day, i) => {
+        const isLong = i === nRuns - 1;
+        let km = isLong ? remaining : (kmTarget / nRuns) * between(0.6, 1.1);
+        km = Math.max(4, Math.min(km, isLong ? kmTarget * 0.5 : kmTarget * 0.35));
+        remaining -= km;
+        const start = new Date(ws.getTime() + day * DAY + between(5.5, 20) * 3600000);
+        if (start > TODAY) return; // current week is partial
+        const paceSec = runner.paceSec * (isLong ? between(1.02, 1.08) : between(0.94, 1.06));
+        out.push({
+          activityId: out.length + 1000,
+          ownerId: runner.id,
+          activityType: "RUNNING",
+          activityName: isLong ? "ריצה ארוכה" : (paceSec < runner.paceSec * 0.97 ? "אימון קצב" : "ריצה קלה"),
+          startTimeInSeconds: Math.floor(start.getTime() / 1000),
+          distanceInMeters: Math.round(km * 1000),
+          durationInSeconds: Math.round(km * paceSec),
+          averageHeartRateInBeatsPerMinute: Math.round(runner.hr + (paceSec < runner.paceSec ? 6 : -2) + between(-4, 4)),
+          deviceName: runner.device,
+        });
+      });
+    });
+  });
+  return out.sort((a, b) => b.startTimeInSeconds - a.startTimeInSeconds);
+}
+
+computeWeeks();
+ACTIVITIES = buildDemoActivities();
+
+/* ---------- helpers ---------- */
+const km = a => a.distanceInMeters / 1000;
+const fmtKm = v => v.toLocaleString("he-IL", { maximumFractionDigits: 1 });
+const fmtPace = secPerKm => {
+  const m = Math.floor(secPerKm / 60), s = Math.round(secPerKm % 60);
+  return m + ":" + String(s).padStart(2, "0");
+};
+const fmtDur = sec => {
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = Math.round(sec % 60);
+  return h ? `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}` : `${m}:${String(s).padStart(2,"0")}`;
+};
+const fmtDate = ts => new Date(ts * 1000).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" });
+const runnerById = id => RUNNERS.find(r => r.id === id);
+const WEEKDAY_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]; // index = Date#getDay(), always Sun -> Sat, left to right
+const fmtDateEn = d => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+const tooltip = document.getElementById("tooltip");
+function showTip(html, x, y) {
+  tooltip.innerHTML = html;
+  tooltip.style.display = "block";
+  const w = tooltip.offsetWidth, h = tooltip.offsetHeight;
+  let left = x + 14, top = y + 14;
+  if (left + w > innerWidth - 8) left = x - w - 14;
+  if (top + h > innerHeight - 8) top = y - h - 14;
+  tooltip.style.left = left + "px";
+  tooltip.style.top = top + "px";
+}
+function hideTip() { tooltip.style.display = "none"; }
+
+/* ---------- range + runner state ---------- */
+let rangeDays = 7;
+let selectedRunnerId = null; // null = everyone
+
+function inRange(a) {
+  return a.startTimeInSeconds * 1000 >= TODAY.getTime() - rangeDays * DAY;
+}
+function matchesRunner(a) {
+  return selectedRunnerId === null || a.ownerId === selectedRunnerId;
+}
+function scoped() {
+  return ACTIVITIES.filter(a => inRange(a) && matchesRunner(a));
+}
+// Current calendar week (Sun -> Sat), independent of the rangeDays toggle.
+function thisWeekActs() {
+  const start = weekStart(TODAY).getTime();
+  return ACTIVITIES.filter(a => {
+    const t = a.startTimeInSeconds * 1000;
+    return t >= start && t < start + 7 * DAY && matchesRunner(a);
+  });
+}
+
+function renderRunnerFilters() {
+  const el = document.getElementById("runnerFilters");
+  el.innerHTML = `<button data-runner="" aria-pressed="${selectedRunnerId === null}">כולם</button>` +
+    RUNNERS.map(r => `<button data-runner="${r.id}" aria-pressed="${selectedRunnerId === r.id}">
+      <span class="chip" style="background:${colorOf(r)}"></span>${r.name}</button>`).join("");
+}
+
+function renderTiles() {
+  const acts = scoped();
+  const totalSec = acts.reduce((s, a) => s + a.durationInSeconds, 0);
+  const totalKmForPace = acts.reduce((s, a) => s + km(a), 0);
+  const avgPace = totalKmForPace ? totalSec / totalKmForPace : 0;
+  const hrW = acts.reduce((s, a) => s + (a.averageHeartRateInBeatsPerMinute || 0) * a.durationInSeconds, 0);
+  const weeklyKm = thisWeekActs().reduce((s, a) => s + km(a), 0);
+  document.getElementById("tiles").innerHTML = `
+    <div class="tile"><div class="label">מרחק שבועי</div><div class="value">${fmtKm(weeklyKm)}<span class="unit">ק״מ</span></div></div>
+    <div class="tile"><div class="label">פעילויות</div><div class="value">${acts.length}</div></div>
+    <div class="tile"><div class="label">קצב ממוצע</div><div class="value">${fmtPace(avgPace)}<span class="unit">דק׳/ק״מ</span></div></div>
+    <div class="tile"><div class="label">דופק ממוצע</div><div class="value">${totalSec ? Math.round(hrW / totalSec) : 0}<span class="unit">bpm</span></div></div>`;
+}
+
+function renderBars() {
+  const cardsRow = document.getElementById("cardsRow");
+  const barCard = document.getElementById("barCard");
+  if (selectedRunnerId !== null) {
+    barCard.style.display = "none";
+    cardsRow.classList.add("single");
+    return;
+  }
+  barCard.style.display = "";
+  cardsRow.classList.remove("single");
+
+  const acts = ACTIVITIES.filter(inRange);
+  const per = RUNNERS.map(r => {
+    const list = acts.filter(a => a.ownerId === r.id);
+    const d = list.reduce((s, a) => s + km(a), 0);
+    const t = list.reduce((s, a) => s + a.durationInSeconds, 0);
+    return { r, kmSum: d, n: list.length, pace: d ? t / d : 0 };
+  }).sort((a, b) => b.kmSum - a.kmSum);
+  const max = Math.max(...per.map(p => p.kmSum), 1);
+  document.getElementById("barSub").textContent = rangeDays === 7 ? "7 הימים האחרונים" : "30 הימים האחרונים";
+  const el = document.getElementById("barChart");
+  el.innerHTML = per.map(p => `
+    <div class="bar-row" data-id="${p.r.id}">
+      <div class="bar-name"><span class="chip" style="background:${colorOf(p.r)}"></span>${p.r.name}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(p.kmSum / max * 100).toFixed(1)}%;background:${colorOf(p.r)}"></div></div>
+      <div class="bar-val">${fmtKm(p.kmSum)} ק״מ</div>
+    </div>`).join("");
+  el.querySelectorAll(".bar-row").forEach(row => {
+    const p = per.find(x => x.r.id === row.dataset.id);
+    row.addEventListener("mousemove", e => showTip(
+      `<div class="t-title">${p.r.name}</div>
+       <div class="t-row">ריצות<b>${p.n}</b></div>
+       <div class="t-row">מרחק<b>${fmtKm(p.kmSum)} ק״מ</b></div>
+       <div class="t-row">קצב ממוצע<b>${fmtPace(p.pace)} דק׳/ק״מ</b></div>`, e.clientX, e.clientY));
+    row.addEventListener("mouseleave", hideTip);
+  });
+}
+
+function renderWeekday() {
+  // Always this calendar week (Sun -> Sat), independent of the 7/30-day toggle above,
+  // so every bar maps to exactly one real date.
+  const start = weekStart(TODAY);
+  const dayDates = [...Array(7).keys()].map(i => new Date(start.getTime() + i * DAY));
+  const acts = thisWeekActs();
+
+  const rangeLabel = `${fmtDateEn(dayDates[0])} – ${fmtDateEn(dayDates[6])}`;
+  document.getElementById("weekdaySub").textContent =
+    rangeLabel + (selectedRunnerId !== null ? " · " + runnerById(selectedRunnerId).name : "");
+
+  const el = document.getElementById("weekdayChart");
+  if (!acts.length) {
+    el.innerHTML = `<div class="empty-note">אין ריצות השבוע</div>`;
+    return;
+  }
+
+  const sums = new Array(7).fill(0), counts = new Array(7).fill(0);
+  acts.forEach(a => {
+    const d = new Date(a.startTimeInSeconds * 1000).getDay();
+    sums[d] += km(a);
+    counts[d]++;
+  });
+
+  const W = 480, H = 250, m = { t: 20, r: 14, b: 36, l: 34 };
+  const maxSum = Math.max(...sums);
+  const niceMax = Math.ceil((maxSum || 1) / 5) * 5 || 5;
+  const bw = (W - m.l - m.r) / 7;
+  const y = v => H - m.b - v / niceMax * (H - m.t - m.b);
+  const ink = getComputedStyle(document.documentElement);
+  const muted = ink.getPropertyValue("--text-muted").trim();
+  const secondary = ink.getPropertyValue("--text-secondary").trim();
+  const grid = ink.getPropertyValue("--grid").trim();
+  const baseline = ink.getPropertyValue("--baseline").trim();
+  const barColor = selectedRunnerId !== null ? colorOf(runnerById(selectedRunnerId)) : ink.getPropertyValue("--series-1").trim();
+
+  let g = "";
+  for (let i = 0; i <= 4; i++) {
+    const v = niceMax * i / 4;
+    g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="${v === 0 ? baseline : grid}" stroke-width="1"/>` +
+         `<text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end" font-size="10" fill="${muted}">${v}</text>`;
+  }
+  for (let i = 0; i < 7; i++) {
+    const bx = m.l + i * bw, barTop = y(sums[i]), barH = Math.max((H - m.b) - barTop, 0);
+    const cx = bx + bw / 2;
+    g += `<rect data-day="${i}" x="${bx + 4}" y="${barTop}" width="${Math.max(bw - 8, 2)}" height="${barH}" rx="4" ry="4" fill="${barColor}"/>`;
+    if (sums[i] > 0) g += `<text x="${cx}" y="${barTop - 6}" text-anchor="middle" font-size="10" fill="${secondary}">${fmtKm(sums[i])}</text>`;
+    g += `<text x="${cx}" y="${H - 22}" text-anchor="middle" font-size="11" fill="${muted}">${WEEKDAY_EN[i]}</text>`;
+    g += `<text x="${cx}" y="${H - 8}" text-anchor="middle" font-size="10" fill="${muted}">${fmtDateEn(dayDates[i])}</text>`;
+  }
+
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${g}</svg>`;
+  el.querySelectorAll("rect[data-day]").forEach(rect => {
+    const i = +rect.dataset.day;
+    rect.addEventListener("mousemove", e => showTip(
+      `<div class="t-title">${WEEKDAY_EN[i]} · ${fmtDateEn(dayDates[i])}</div>
+       <div class="t-row">סה״כ ק״מ<b>${fmtKm(sums[i])}</b></div>
+       <div class="t-row">ריצות<b>${counts[i]}</b></div>`, e.clientX, e.clientY));
+    rect.addEventListener("mouseleave", hideTip);
+  });
+}
+
+function renderTable() {
+  const all = scoped();
+  const acts = all.slice(0, 14);
+  document.getElementById("tableSub").textContent =
+    (rangeDays === 7 ? "7 הימים האחרונים" : "30 הימים האחרונים") +
+    (selectedRunnerId !== null ? " · " + runnerById(selectedRunnerId).name : "") +
+    (all.length > 14 ? " · 14 אחרונות" : "");
+  document.getElementById("tbody").innerHTML = acts.map(a => {
+    const r = runnerById(a.ownerId);
+    const pace = a.durationInSeconds / km(a);
+    return `<tr data-activity-id="${a.activityId}">
+      <td>${fmtDate(a.startTimeInSeconds)}</td>
+      <td><span class="runner-cell"><span class="chip" style="background:${colorOf(r)}"></span>${r.name}</span></td>
+      <td>${fmtKm(km(a))} ק״מ</td>
+      <td>${fmtDur(a.durationInSeconds)}</td>
+      <td>${fmtPace(pace)} דק׳/ק״מ</td>
+      <td>${a.averageHeartRateInBeatsPerMinute}</td>
+      <td class="device">${a.deviceName}</td>
+    </tr>`;
+  }).join("");
+  document.getElementById("tbody").querySelectorAll("tr").forEach(tr => {
+    tr.addEventListener("click", () => openDetail(tr.dataset.activityId));
+  });
+}
+
+/* ---------- per-activity detail panel: laps + streams (real data only) ---------- */
+const detailCache = new Map();
+
+async function loadDetail(activityId) {
+  if (detailCache.has(activityId)) return detailCache.get(activityId);
+  try {
+    const res = await fetch(`details/${activityId}.json`, { cache: "no-store" });
+    const detail = res.ok ? await res.json() : null;
+    detailCache.set(activityId, detail);
+    return detail;
+  } catch { return null; }
+}
+
+function downsample(xs, ys, target = 220) {
+  const n = xs.length;
+  if (n <= target) return { x: xs, y: ys };
+  const step = n / target, x = [], y = [];
+  for (let i = 0; i < target; i++) {
+    const idx = Math.floor(i * step);
+    x.push(xs[idx]); y.push(ys[idx]);
+  }
+  return { x, y };
+}
+
+function miniLineChart(xs, ys, { color, yFmt, yTicks = 4, unitLabel }) {
+  const W = 480, H = 130, m = { t: 8, r: 10, b: 20, l: 40 };
+  const pts = xs.map((x, i) => [x, ys[i]]).filter(([, y]) => y != null);
+  if (pts.length < 2) return `<div class="empty-note">אין מספיק נתונים לגרף</div>`;
+  const xVals = pts.map(p => p[0]), yVals = pts.map(p => p[1]);
+  const xMin = Math.min(...xVals), xMax = Math.max(...xVals);
+  const yMin = Math.min(...yVals), yMax = Math.max(...yVals);
+  const pad = (yMax - yMin) * 0.1 || 1;
+  const yLo = Math.max(0, yMin - pad), yHi = yMax + pad;
+  const x = v => m.l + (v - xMin) / (xMax - xMin || 1) * (W - m.l - m.r);
+  const y = v => H - m.b - (v - yLo) / (yHi - yLo || 1) * (H - m.t - m.b);
+  const ink = getComputedStyle(document.documentElement);
+  const muted = ink.getPropertyValue("--text-muted").trim();
+  const grid = ink.getPropertyValue("--grid").trim();
+  const surface = ink.getPropertyValue("--surface-1").trim();
+
+  let g = "";
+  for (let i = 0; i <= yTicks; i++) {
+    const v = yLo + (yHi - yLo) * i / yTicks;
+    g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="${grid}" stroke-width="1"/>` +
+         `<text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end" font-size="9" fill="${muted}">${yFmt(v)}</text>`;
+  }
+  const line = pts.map(([px, py]) => `${x(px)},${y(py)}`).join(" ");
+  g += `<polyline points="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  g += `<line id="mxhair" y1="${m.t}" y2="${H - m.b}" stroke="${ink.getPropertyValue("--baseline").trim()}" stroke-width="1" visibility="hidden"/>`;
+  g += `<circle id="mdot" r="3.5" fill="${color}" stroke="${surface}" stroke-width="2" visibility="hidden"/>`;
+
+  const html = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block" data-xmin="${xMin}" data-xmax="${xMax}" data-ml="${m.l}" data-mr="${m.r}" data-w="${W}">${g}</svg>`;
+  requestAnimationFrame(() => {
+    document.querySelectorAll(`svg[data-ml]:not([data-wired])`).forEach(svg => {
+      svg.setAttribute("data-wired", "1");
+      const xhair = svg.querySelector("#mxhair"), dot = svg.querySelector("#mdot");
+      svg.addEventListener("mousemove", e => {
+        const rect = svg.getBoundingClientRect();
+        const svgW = +svg.dataset.w, mlLocal = +svg.dataset.ml, mrLocal = +svg.dataset.mr;
+        const sx = (e.clientX - rect.left) / rect.width * svgW;
+        const xm = +svg.dataset.xmin, xM = +svg.dataset.xmax;
+        const xv = xm + (sx - mlLocal) / (svgW - mlLocal - mrLocal) * (xM - xm);
+        let best = pts[0], bestD = Infinity;
+        for (const p of pts) { const d = Math.abs(p[0] - xv); if (d < bestD) { bestD = d; best = p; } }
+        const px = m.l + (best[0] - xm) / (xM - xm || 1) * (svgW - m.l - m.r);
+        xhair.setAttribute("x1", px); xhair.setAttribute("x2", px); xhair.setAttribute("visibility", "visible");
+        const py = svg.querySelector("polyline");
+        dot.setAttribute("cx", px);
+        // recompute y from the same scale used to draw
+        dot.setAttribute("cy", H - m.b - (best[1] - yLo) / (yHi - yLo || 1) * (H - m.t - m.b));
+        dot.setAttribute("visibility", "visible");
+        showTip(`<div class="t-row">${unitLabel}<b>${yFmt(best[1])}</b></div>`, e.clientX, e.clientY);
+      });
+      svg.addEventListener("mouseleave", () => { hideTip(); xhair.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); });
+    });
+  });
+  return html;
+}
+
+async function openDetail(activityId) {
+  const a = ACTIVITIES.find(x => String(x.activityId) === String(activityId));
+  const r = a ? runnerById(a.ownerId) : null;
+  const sheet = document.getElementById("sheet");
+  sheet.innerHTML = `
+    <div class="sheet-head">
+      <div>
+        <h3>${a ? a.activityName : "ריצה"}</h3>
+        <div class="sheet-sub">${r ? r.name + " · " : ""}${a ? fmtDate(a.startTimeInSeconds) : ""}</div>
+      </div>
+      <button class="close-btn" id="closeSheet">סגור ✕</button>
+    </div>
+    <div id="sheetBody"><div class="empty-note">טוען פרטים…</div></div>`;
+  document.getElementById("overlay").style.display = "block";
+  document.getElementById("closeSheet").addEventListener("click", closeDetail);
+
+  const detail = await loadDetail(activityId);
+  const body = document.getElementById("sheetBody");
+  if (!detail) {
+    body.innerHTML = `<div class="empty-note">אין פרטים (הפסקות/גרפים) לריצה הזו עדיין.<br>
+      פרטים נמשכים רק ל-20 הריצות האחרונות — הרץ <code>node fetch-data.js</code> שוב אם זו ריצה חדשה.</div>`;
+    return;
+  }
+
+  const tilesHtml = a ? `
+    <div class="mini-tiles">
+      <div class="mini-tile"><div class="label">מרחק</div><div class="value">${fmtKm(km(a))} ק״מ</div></div>
+      <div class="mini-tile"><div class="label">זמן</div><div class="value">${fmtDur(a.durationInSeconds)}</div></div>
+      <div class="mini-tile"><div class="label">קצב ממוצע</div><div class="value">${fmtPace(a.durationInSeconds / km(a))}</div></div>
+      <div class="mini-tile"><div class="label">דופק ממוצע</div><div class="value">${a.averageHeartRateInBeatsPerMinute ?? "-"}</div></div>
+    </div>` : "";
+
+  let lapsHtml = `<div class="empty-note">אין נתוני הפסקות</div>`;
+  if (detail.laps && detail.laps.length) {
+    lapsHtml = `<table><thead><tr><th>#</th><th>מרחק</th><th>קצב</th><th>דופק</th><th>קדנס</th></tr></thead><tbody>` +
+      detail.laps.map((l, i) => `<tr>
+        <td>${i + 1}</td>
+        <td>${l.distanceInMeters != null ? fmtKm(l.distanceInMeters / 1000) : "-"} ק״מ</td>
+        <td>${l.paceSecPerKm ? fmtPace(l.paceSecPerKm) : "-"}</td>
+        <td>${l.averageHeartRateInBeatsPerMinute ?? "-"}</td>
+        <td>${l.averageCadence ?? "-"}</td>
+      </tr>`).join("") + `</tbody></table>`;
+  }
+
+  let chartsHtml = "";
+  if (detail.streams && detail.streams.timeInSeconds?.length) {
+    const distKm = detail.streams.distanceInMeters.map(d => d / 1000);
+    const { x: xHr, y: yHr } = downsample(distKm, detail.streams.heartrate);
+    const { x: xPc, y: yPc } = downsample(distKm, detail.streams.paceSecPerKm);
+    chartsHtml = `
+      <div class="section-title">דופק לאורך הריצה</div>
+      ${miniLineChart(xHr, yHr, { color: "var(--series-6)", yFmt: v => Math.round(v), unitLabel: "דופק" })}
+      <div class="section-title">קצב לאורך הריצה</div>
+      ${miniLineChart(xPc, yPc, { color: "var(--series-1)", yFmt: v => fmtPace(v), unitLabel: "קצב" })}
+      <div class="chart-note">ציר X: מרחק (ק״מ) · קצב נמוך יותר = ריצה מהירה יותר</div>`;
+  }
+
+  body.innerHTML = tilesHtml +
+    `<div class="section-title">הפסקות (${detail.laps?.length || 0})</div>${lapsHtml}` +
+    chartsHtml;
+}
+
+function closeDetail() { document.getElementById("overlay").style.display = "none"; }
+document.getElementById("overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeDetail(); });
+
+function renderAll() { renderRunnerFilters(); renderTiles(); renderBars(); renderWeekday(); renderTable(); }
+
+document.querySelectorAll('.filters[aria-label="טווח זמן"] button').forEach(btn => {
+  btn.addEventListener("click", () => {
+    rangeDays = +btn.dataset.days;
+    document.querySelectorAll('.filters[aria-label="טווח זמן"] button')
+      .forEach(b => b.setAttribute("aria-pressed", b === btn ? "true" : "false"));
+    renderAll();
+  });
+});
+
+document.getElementById("runnerFilters").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-runner]");
+  if (!btn) return;
+  selectedRunnerId = btn.dataset.runner || null;
+  renderAll();
+});
+
+/* Real data, if fetch-data.js has produced any; otherwise the demo above stands. */
+async function loadReal() {
+  let d;
+  try {
+    const res = await fetch("data.json", { cache: "no-store" });
+    if (!res.ok) return false;
+    d = await res.json();
+  } catch { return false; }
+  if (!d || !Array.isArray(d.activities) || !d.activities.length) return false;
+
+  RUNNERS = d.runners;
+  ACTIVITIES = d.activities.slice().sort((a, b) => b.startTimeInSeconds - a.startTimeInSeconds);
+  TODAY = new Date();
+  computeWeeks();
+
+  const when = d.generatedAt ? new Date(d.generatedAt).toLocaleString("he-IL", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+  document.getElementById("badge").textContent = "נתונים אמיתיים · " + (d.source || "");
+  document.getElementById("subtitle").textContent =
+    `${RUNNERS.length} מתאמנים · ${ACTIVITIES.length} ריצות` + (when ? ` · עודכן ${when}` : "");
+  return true;
+}
+
+renderAll();
+loadReal().then(ok => { if (ok) renderAll(); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);
+</script>
+</body>
+</html>

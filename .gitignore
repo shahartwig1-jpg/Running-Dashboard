@@ -1,0 +1,9 @@
+# Secrets — never commit or share these
+key.txt
+config.json
+
+# Generated
+data.json
+details/
+dashboard.db
+dashboard.db-*

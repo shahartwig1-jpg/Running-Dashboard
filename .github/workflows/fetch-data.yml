@@ -1,0 +1,60 @@
+name: Fetch running data
+
+# Runs the same node fetch-data.js you'd run locally, on a schedule, so nobody has to
+# remember to do it. The code lives in this (public) repo; the actual running data
+# (names, distance, HR) lives in a separate PRIVATE repo, checked out here only in
+# memory during the job and pushed back there — never committed to this repo.
+on:
+  schedule:
+    - cron: "0 */6 * * *" # every 6 hours
+  workflow_dispatch: {} # lets you trigger a run manually from the Actions tab, for testing
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code (this repo)
+        uses: actions/checkout@v4
+
+      - name: Checkout data repo (private)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/garmin-run-dashboard-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Load existing data from the private repo
+        run: |
+          mkdir -p details
+          [ -f data-repo/data.json ] && cp data-repo/data.json data.json || true
+          [ -f data-repo/dashboard.db ] && cp data-repo/dashboard.db dashboard.db || true
+          if [ -d data-repo/details ]; then cp -r data-repo/details/. details/; fi
+
+      - name: Fetch latest activities
+        env:
+          INTERVALS_API_KEY: ${{ secrets.INTERVALS_API_KEY }}
+          ATHLETES_JSON: ${{ secrets.ATHLETES_JSON }}
+        run: node fetch-data.js
+
+      - name: Push updated data back to the private repo
+        run: |
+          rm -rf data-repo/details
+          mkdir -p data-repo/details
+          cp data.json data-repo/data.json
+          cp dashboard.db data-repo/dashboard.db
+          cp -r details/. data-repo/details/
+          cd data-repo
+          git config user.name "garmin-run-dashboard-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add .
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update run data $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            git push
+          fi
