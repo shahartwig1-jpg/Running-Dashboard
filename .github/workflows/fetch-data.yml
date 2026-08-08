@@ -4,6 +4,7 @@ name: Fetch running data
 # remember to do it. Everything fetch-data.js writes goes straight to Supabase (see
 # supabase.js) — there is nothing to check out or push back to a git repo, so this
 # workflow only needs Supabase + Intervals.icu credentials as secrets.
+
 on:
   schedule:
     - cron: "0 */6 * * *" # every 6 hours
