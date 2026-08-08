@@ -19,6 +19,8 @@ const server = http.createServer((req, res) => {
     const type = file.endsWith(".html") ? "text/html; charset=utf-8"
       : file.endsWith(".js") ? "text/javascript; charset=utf-8"
       : file.endsWith(".json") ? "application/json; charset=utf-8"
+      : file.endsWith(".jpg") || file.endsWith(".jpeg") ? "image/jpeg"
+      : file.endsWith(".png") ? "image/png"
       : "application/octet-stream";
     res.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store" });
     res.end(data);

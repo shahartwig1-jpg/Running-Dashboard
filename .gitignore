@@ -1,6 +1,12 @@
 # Secrets — never commit or share these
 key.txt
 config.json
+supabase-url.txt
+supabase-key.txt
+
+# Personal — real faces / real training plan of the group, not code
+team.jpg
+plan.csv
 
 # Generated
 data.json

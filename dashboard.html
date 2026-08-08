@@ -87,14 +87,32 @@
   }
   .wrap { max-width: 1100px; margin: 0 auto; }
 
+  /* Team photo banner — colors here are fixed (not theme vars): text always sits on a
+     dark photo regardless of light/dark mode, so it must always be light.
+     Cropped (cover), positioned to keep every face + a bit of body — the two people
+     crouching in front are lower in the frame than the standing row, so this needs to
+     be tall enough to reach them; tune the 54% if the framing needs to shift. */
+  .hero { position: relative; height: 360px; border-radius: 14px; overflow: hidden; margin-bottom: 20px;
+    background: url("team.jpg") center 54% / cover no-repeat; }
+  .hero::after {
+    content: "";
+    position: absolute; inset: 0; z-index: 2;
+    background: linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.32) 48%, rgba(0,0,0,0.05) 100%);
+  }
+  .hero-content { position: relative; z-index: 3; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; padding: 16px 20px; }
+  @media (max-width: 860px) { .hero { height: 220px; } }
+
   header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px; margin-bottom: 4px; }
   h1 { font-size: 22px; font-weight: 700; }
+  .hero h1 { color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,0.5); }
   .demo-badge {
     font-size: 12px; color: var(--text-secondary);
     border: 1px solid var(--border); border-radius: 999px;
     padding: 3px 10px; background: var(--surface-1);
   }
+  .hero .demo-badge { color: #fff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.14); }
   .subtitle { font-size: 13px; color: var(--text-muted); margin-bottom: 18px; }
+  .hero .subtitle { color: rgba(255,255,255,0.88); margin-bottom: 0; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
 
   .filters { display: flex; gap: 8px; margin-bottom: 18px; }
   .filters button {
@@ -144,6 +162,22 @@
   .bar-row:hover .bar-track { outline: 2px solid var(--surface-1); }
 
   svg text { font-family: inherit; }
+
+  /* Weekly plan */
+  .week-nav-btn {
+    font: inherit; font-size: 13px; cursor: pointer; color: var(--text-secondary);
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px;
+  }
+  .week-nav-btn:hover:not(:disabled) { border-color: var(--baseline); }
+  .week-nav-btn:disabled { opacity: 0.4; cursor: default; }
+  .plan-row { display: flex; gap: 12px; padding: 8px 2px; border-bottom: 1px solid var(--grid); align-items: baseline; }
+  .plan-row:last-child { border-bottom: none; }
+  .plan-row.today { background: var(--page); border-radius: 8px; padding-inline-start: 8px; margin-inline-start: -8px; }
+  .plan-day { flex: 0 0 70px; font-weight: 600; font-size: 13px; }
+  .plan-date { flex: 0 0 60px; color: var(--text-muted); font-size: 11px; }
+  .plan-text { flex: 1; font-size: 13px; color: var(--text-secondary); }
+  .plan-row.today .plan-text { color: var(--text-primary); font-weight: 600; }
+  .plan-rest .plan-text { color: var(--text-muted); }
 
   /* Table */
   .card table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -205,11 +239,15 @@
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <h1>🏃 דשבורד קבוצת ריצה</h1>
-    <span class="demo-badge" id="badge">נתוני דמו</span>
-  </header>
-  <div class="subtitle" id="subtitle">חמישה מתאמנים · הנתונים מדמים את מה שיגיע מהשעונים אחרי חיבור אמיתי</div>
+  <div class="hero">
+    <div class="hero-content">
+      <header>
+        <h1>🏃 דשבורד קבוצת ריצה</h1>
+        <span class="demo-badge" id="badge">נתוני דמו</span>
+      </header>
+      <div class="subtitle" id="subtitle">חמישה מתאמנים · הנתונים מדמים את מה שיגיע מהשעונים אחרי חיבור אמיתי</div>
+    </div>
+  </div>
 
   <div class="filters" role="group" aria-label="טווח זמן">
     <button data-days="7"  aria-pressed="true">7 ימים אחרונים</button>
@@ -231,6 +269,24 @@
       <div class="sub" id="weekdaySub"></div>
       <div dir="ltr" id="weekdayChart"></div>
     </div>
+  </div>
+
+  <div class="card" id="sleepCard">
+    <h2>שעות שינה ממוצע</h2>
+    <div class="sub" id="sleepSub"></div>
+    <div id="sleepChart"></div>
+  </div>
+
+  <div class="card" id="planCard">
+    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+      <h2>תכנית האימונים השבועית</h2>
+      <div style="display:flex; gap:6px;">
+        <button id="planPrev" class="week-nav-btn" type="button">‹ שבוע קודם</button>
+        <button id="planNext" class="week-nav-btn" type="button">שבוע הבא ›</button>
+      </div>
+    </div>
+    <div class="sub" id="planSub"></div>
+    <div id="planChart"></div>
   </div>
 
   <div class="card">
@@ -289,6 +345,9 @@ let RUNNERS = DEMO_RUNNERS;
 let TODAY = new Date(2026, 6, 15, 12, 0, 0); // demo reference date
 let WEEKS = [];
 let ACTIVITIES = [];
+let SLEEP = [];
+let PLAN_HISTORY = {}; // ownerId -> { weekStartISO -> array of 7 day strings (Sun -> Sat) }
+let planWeekOffset = 0; // 0 = this week, -1 = last week, etc. — reset to 0 whenever the runner selection changes
 
 function computeWeeks() {
   WEEKS = []; // oldest -> current
@@ -331,8 +390,20 @@ function buildDemoActivities() {
   return out.sort((a, b) => b.startTimeInSeconds - a.startTimeInSeconds);
 }
 
+function buildDemoSleep() {
+  const out = [];
+  RUNNERS.forEach(runner => {
+    for (let d = 0; d < 30; d++) {
+      const day = new Date(TODAY.getTime() - d * DAY);
+      out.push({ ownerId: runner.id, date: day.toISOString().slice(0, 10), sleepSecs: Math.round(between(5.5, 8.5) * 3600) });
+    }
+  });
+  return out;
+}
+
 computeWeeks();
 ACTIVITIES = buildDemoActivities();
+SLEEP = buildDemoSleep();
 
 /* ---------- helpers ---------- */
 const km = a => a.distanceInMeters / 1000;
@@ -348,6 +419,7 @@ const fmtDur = sec => {
 const fmtDate = ts => new Date(ts * 1000).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" });
 const runnerById = id => RUNNERS.find(r => r.id === id);
 const WEEKDAY_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]; // index = Date#getDay(), always Sun -> Sat, left to right
+const WEEKDAY_HE = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"]; // index = Date#getDay()
 const fmtDateEn = d => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
 const tooltip = document.getElementById("tooltip");
@@ -442,6 +514,80 @@ function renderBars() {
        <div class="t-row">קצב ממוצע<b>${fmtPace(p.pace)} דק׳/ק״מ</b></div>`, e.clientX, e.clientY));
     row.addEventListener("mouseleave", hideTip);
   });
+}
+
+function fmtHoursMin(hours) {
+  const h = Math.floor(hours), m = Math.round((hours - h) * 60);
+  return `${h}:${String(m).padStart(2, "0")} שעות`;
+}
+
+function renderSleep() {
+  const card = document.getElementById("sleepCard");
+  card.style.display = "";
+  document.getElementById("sleepSub").textContent =
+    (rangeDays === 7 ? "7 הימים האחרונים" : "30 הימים האחרונים") +
+    (selectedRunnerId !== null ? " · " + runnerById(selectedRunnerId).name : "");
+
+  const cutoff = TODAY.getTime() - rangeDays * DAY;
+  const runnersToShow = selectedRunnerId !== null ? RUNNERS.filter(r => r.id === selectedRunnerId) : RUNNERS;
+  const per = runnersToShow.map(r => {
+    const nights = SLEEP.filter(s => s.ownerId === r.id && s.sleepSecs != null && new Date(s.date).getTime() >= cutoff);
+    const avgHours = nights.length ? nights.reduce((s, n) => s + n.sleepSecs, 0) / nights.length / 3600 : null;
+    return { r, avgHours, nights: nights.length };
+  }).sort((a, b) => (b.avgHours ?? -1) - (a.avgHours ?? -1));
+
+  const el = document.getElementById("sleepChart");
+  if (!per.some(p => p.avgHours != null)) {
+    el.innerHTML = `<div class="empty-note">אין נתוני שינה עדיין</div>`;
+    return;
+  }
+  const max = Math.max(...per.map(p => p.avgHours || 0), 1);
+  el.innerHTML = per.map(p => `
+    <div class="bar-row">
+      <div class="bar-name"><span class="chip" style="background:${colorOf(p.r)}"></span>${p.r.name}</div>
+      <div class="bar-track">${p.avgHours != null ? `<div class="bar-fill" style="width:${(p.avgHours / max * 100).toFixed(1)}%;background:${colorOf(p.r)}"></div>` : ""}</div>
+      <div class="bar-val">${p.avgHours != null ? fmtHoursMin(p.avgHours) : "אין נתונים"}</div>
+    </div>`).join("");
+}
+
+function renderPlan() {
+  const card = document.getElementById("planCard");
+  card.style.display = "";
+  const sub = document.getElementById("planSub"), el = document.getElementById("planChart");
+  const prevBtn = document.getElementById("planPrev"), nextBtn = document.getElementById("planNext");
+
+  if (selectedRunnerId === null) {
+    sub.textContent = "בחר רץ למעלה כדי לראות את התכנית שלו";
+    el.innerHTML = `<div class="empty-note">התכנית היא אישית לכל רץ — בחר שם מהרשימה למעלה</div>`;
+    prevBtn.disabled = true; nextBtn.disabled = true;
+    return;
+  }
+  prevBtn.disabled = false;
+  nextBtn.disabled = planWeekOffset >= 0; // can't browse into weeks that haven't happened yet
+
+  const r = runnerById(selectedRunnerId);
+  const start = new Date(weekStart(TODAY).getTime() + planWeekOffset * 7 * DAY);
+  const weekStartStr = start.toISOString().slice(0, 10);
+  const days = (PLAN_HISTORY[selectedRunnerId] || {})[weekStartStr];
+  const weekEnd = new Date(start.getTime() + 6 * DAY);
+  const rangeLabel = `${start.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}–${weekEnd.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}`;
+  sub.textContent = `${r.name} · ${rangeLabel}` + (planWeekOffset === 0 ? " (השבוע)" : "");
+
+  if (!days) {
+    el.innerHTML = `<div class="empty-note">אין תכנית שמורה לשבוע הזה</div>`;
+    return;
+  }
+  const todayIdx = planWeekOffset === 0 ? TODAY.getDay() : -1;
+  el.innerHTML = days.map((text, i) => {
+    const d = new Date(start.getTime() + i * DAY);
+    const isToday = i === todayIdx;
+    const isRest = /מנוחה/.test(text || "");
+    return `<div class="plan-row${isToday ? " today" : ""}${isRest ? " plan-rest" : ""}">
+      <div class="plan-day">${WEEKDAY_HE[i]}</div>
+      <div class="plan-date">${d.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}</div>
+      <div class="plan-text">${text || "—"}</div>
+    </div>`;
+  }).join("");
 }
 
 function renderWeekday() {
@@ -675,7 +821,7 @@ async function openDetail(activityId) {
 function closeDetail() { document.getElementById("overlay").style.display = "none"; }
 document.getElementById("overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeDetail(); });
 
-function renderAll() { renderRunnerFilters(); renderTiles(); renderBars(); renderWeekday(); renderTable(); }
+function renderAll() { renderRunnerFilters(); renderTiles(); renderBars(); renderSleep(); renderPlan(); renderWeekday(); renderTable(); }
 
 document.querySelectorAll('.filters[aria-label="טווח זמן"] button').forEach(btn => {
   btn.addEventListener("click", () => {
@@ -690,8 +836,12 @@ document.getElementById("runnerFilters").addEventListener("click", e => {
   const btn = e.target.closest("button[data-runner]");
   if (!btn) return;
   selectedRunnerId = btn.dataset.runner || null;
+  planWeekOffset = 0;
   renderAll();
 });
+
+document.getElementById("planPrev").addEventListener("click", () => { planWeekOffset--; renderPlan(); });
+document.getElementById("planNext").addEventListener("click", () => { if (planWeekOffset < 0) { planWeekOffset++; renderPlan(); } });
 
 /* Real data, if fetch-data.js has produced any; otherwise the demo above stands. */
 async function loadReal() {
@@ -705,6 +855,8 @@ async function loadReal() {
 
   RUNNERS = d.runners;
   ACTIVITIES = d.activities.slice().sort((a, b) => b.startTimeInSeconds - a.startTimeInSeconds);
+  SLEEP = Array.isArray(d.sleep) ? d.sleep : [];
+  PLAN_HISTORY = d.planHistory && typeof d.planHistory === "object" ? d.planHistory : {};
   TODAY = new Date();
   computeWeeks();
 

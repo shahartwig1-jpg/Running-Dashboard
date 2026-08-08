@@ -33,6 +33,31 @@ function openDb() {
       streamsJson TEXT,
       fetchedAt TEXT NOT NULL
     );
+    -- Deliberately narrow: Intervals.icu's wellness record also carries mood, stress,
+    -- bodyFat, bloodGlucose, menstrualPhase, etc. Only sleep fields are asked for here
+    -- and only sleep fields are ever written to this table.
+    CREATE TABLE IF NOT EXISTS sleep (
+      ownerId TEXT NOT NULL,
+      date TEXT NOT NULL,
+      sleepSecs INTEGER,
+      sleepScore REAL,
+      sleepQuality INTEGER,
+      avgSleepingHR INTEGER,
+      fetchedAt TEXT NOT NULL,
+      PRIMARY KEY (ownerId, date)
+    );
+    -- plan.csv only ever holds "the current plan" — it gets overwritten by hand each
+    -- week. This table is what actually remembers past weeks: every fetch-data.js run
+    -- snapshots that week's plan under its Sunday date, so re-running mid-week just
+    -- updates that week's row (idempotent) instead of creating duplicates.
+    CREATE TABLE IF NOT EXISTS plan_history (
+      ownerId TEXT NOT NULL,
+      weekStart TEXT NOT NULL,
+      weekday INTEGER NOT NULL,
+      text TEXT,
+      fetchedAt TEXT NOT NULL,
+      PRIMARY KEY (ownerId, weekStart, weekday)
+    );
   `);
   return db;
 }
