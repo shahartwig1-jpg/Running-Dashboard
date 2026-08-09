@@ -68,7 +68,7 @@ node serve.js
 
 | קובץ | תפקיד |
 |---|---|
-| `dashboard.html` | הדשבורד עצמו — עיצוב, גרפים, נתוני דמו |
+| `index.html` | הדשבורד עצמו — עיצוב, גרפים, נתוני דמו (שם הקובץ `index.html` ולא `dashboard.html` כדי שאתרי אחסון סטטי כמו Render יגישו אותו אוטומטית ב-`/`) |
 | `fetch-data.js` | מושך מ-Intervals.icu, כותב את `data.json`/`details/`, ומעדכן את Supabase |
 | `supabase.js` | קריאות REST ל-Supabase (אפס תלויות חיצוניות) |
 | `supabase/schema.sql` | מבנה הטבלאות ב-Supabase — מריצים פעם אחת ב-SQL Editor |

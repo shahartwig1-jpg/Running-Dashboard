@@ -11,7 +11,7 @@ const BLOCKED = new Set(["key.txt", "config.json", "config.example.json"]);
 
 const server = http.createServer((req, res) => {
   const urlPath = decodeURIComponent(req.url.split("?")[0]);
-  let file = path.join(ROOT, urlPath === "/" ? "dashboard.html" : urlPath);
+  let file = path.join(ROOT, urlPath === "/" ? "index.html" : urlPath);
   if (!file.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
   if (BLOCKED.has(path.basename(file))) { res.writeHead(403); return res.end("forbidden"); }
   fs.readFile(file, (err, data) => {

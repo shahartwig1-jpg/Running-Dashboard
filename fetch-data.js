@@ -131,7 +131,7 @@ async function call(apiKey, endpoint) {
 
 const isoDaysAgo = n => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 const today = () => new Date().toISOString().slice(0, 10);
-const thisWeekStart = () => { // this week's Sunday, as YYYY-MM-DD — same convention dashboard.html uses
+const thisWeekStart = () => { // this week's Sunday, as YYYY-MM-DD — same convention index.html uses
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() - d.getDay());
