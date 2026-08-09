@@ -525,7 +525,9 @@ function renderBars() {
   barCard.style.display = "";
   cardsRow.classList.remove("single");
 
-  const acts = ACTIVITIES.filter(inRange);
+  // Always the current calendar week (Sun -> Sat), not the 7/30-day toggle — same
+  // convention as "מרחק שבועי" and "ק״מ לפי יום בשבוע", so all three agree.
+  const acts = thisWeekActs();
   const per = RUNNERS.map(r => {
     const list = acts.filter(a => a.ownerId === r.id);
     const d = list.reduce((s, a) => s + km(a), 0);
@@ -533,7 +535,9 @@ function renderBars() {
     return { r, kmSum: d, n: list.length, pace: d ? t / d : 0 };
   }).sort((a, b) => b.kmSum - a.kmSum);
   const max = Math.max(...per.map(p => p.kmSum), 1);
-  document.getElementById("barSub").textContent = rangeDays === 7 ? "7 הימים האחרונים" : "30 הימים האחרונים";
+  const wStart = weekStart(TODAY), wEnd = new Date(wStart.getTime() + 6 * DAY);
+  document.getElementById("barSub").textContent =
+    `${wStart.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}–${wEnd.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })} (השבוע)`;
   const el = document.getElementById("barChart");
   el.innerHTML = per.map(p => `
     <div class="bar-row" data-id="${p.r.id}">
