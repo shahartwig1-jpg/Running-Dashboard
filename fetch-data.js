@@ -364,14 +364,19 @@ async function fetchAll(cfg) {
   console.log("Refresh the dashboard to see them.");
 }
 
-(async () => {
-  const cfg = loadConfig();
-  try {
-    if (process.argv[2] === "discover") await discover(cfg);
-    else await fetchAll(cfg);
-  } catch (e) {
-    console.error("Error:", e.message);
-    if (e.body) console.error(e.body);
-    process.exit(1);
-  }
-})();
+// Only auto-run as a script (`node fetch-data.js`) — not when required by tests.
+if (require.main === module) {
+  (async () => {
+    const cfg = loadConfig();
+    try {
+      if (process.argv[2] === "discover") await discover(cfg);
+      else await fetchAll(cfg);
+    } catch (e) {
+      console.error("Error:", e.message);
+      if (e.body) console.error(e.body);
+      process.exit(1);
+    }
+  })();
+}
+
+module.exports = { normalize, normalizeLap, normalizeStreams, parseCsv };
