@@ -235,15 +235,51 @@
 
   footer { margin-top: 22px; font-size: 12px; color: var(--text-muted); line-height: 1.6; }
   footer code { font-family: Consolas, monospace; font-size: 11px; }
+
+  /* Login gate — only used on the public deploy; localhost keeps reading data.json directly */
+  #loginScreen {
+    position: fixed; inset: 0; z-index: 30; display: none;
+    align-items: center; justify-content: center;
+    background: var(--page);
+  }
+  #loginScreen .card { width: min(340px, 90vw); text-align: center; }
+  #loginScreen h2 { font-size: 16px; margin-bottom: 4px; }
+  #loginScreen .sub { margin-bottom: 16px; }
+  #loginScreen input {
+    width: 100%; font: inherit; font-size: 14px; padding: 9px 12px; margin-bottom: 8px;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--page); color: var(--text-primary);
+  }
+  #loginScreen button {
+    width: 100%; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+    padding: 10px 12px; border: none; border-radius: 8px; background: var(--series-1); color: #fff; margin-top: 4px;
+  }
+  #loginScreen button:disabled { opacity: 0.6; cursor: default; }
+  #loginScreen .error { color: var(--series-6); font-size: 12px; margin-top: 8px; min-height: 16px; }
+  #signOutBtn {
+    font: inherit; font-size: 12px; cursor: pointer; color: var(--text-muted);
+    background: none; border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px;
+  }
 </style>
 </head>
 <body>
+<div id="loginScreen">
+  <div class="card">
+    <h2>🏃 דשבורד קבוצת ריצה</h2>
+    <div class="sub" style="font-size:12px;color:var(--text-muted)">התחברות לחברי הקבוצה בלבד</div>
+    <input type="email" id="loginEmail" placeholder="אימייל" autocomplete="username">
+    <input type="password" id="loginPassword" placeholder="סיסמה" autocomplete="current-password">
+    <button id="loginBtn" type="button">התחבר</button>
+    <div class="error" id="loginError"></div>
+  </div>
+</div>
+
 <div class="wrap">
   <div class="hero">
     <div class="hero-content">
       <header>
         <h1>🏃 דשבורד קבוצת ריצה</h1>
         <span class="demo-badge" id="badge">נתוני דמו</span>
+        <button id="signOutBtn" type="button" style="display:none">התנתק</button>
       </header>
       <div class="subtitle" id="subtitle">חמישה מתאמנים · הנתונים מדמים את מה שיגיע מהשעונים אחרי חיבור אמיתי</div>
     </div>
@@ -867,8 +903,111 @@ async function loadReal() {
   return true;
 }
 
+/* ---------- Supabase live data + login (used when data.json isn't available, i.e. the
+   public deploy — localhost keeps working off data.json above, no login needed there) ---------- */
+const SUPABASE_URL = "https://vyvfrnkxvsjinzflrnig.supabase.co";
+const SUPABASE_KEY = "sb_publishable_XfY3Rn_Nv7mCeVtQ5VN38A_eegSLLV7"; // safe to expose — protected by RLS, not secrecy
+const SESSION_KEY = "runDashboardSession";
+
+function saveSession(s) { sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
+function getSession() { try { return JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch { return null; } }
+function clearSession() { sessionStorage.removeItem(SESSION_KEY); }
+
+async function supabaseSignIn(email, password) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error_description || body.msg || "login failed");
+  return body; // { access_token, ... }
+}
+
+async function supaGet(pathWithQuery, accessToken) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${pathWithQuery}`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("Supabase request failed: " + pathWithQuery);
+  return res.json();
+}
+
+async function loadFromSupabase(accessToken) {
+  const cutoffSec = Math.floor(Date.now() / 1000) - 90 * 86400;
+  const cutoffDate = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+
+  const [runnersRaw, activitiesRaw, sleepRaw, planRaw] = await Promise.all([
+    supaGet(`runners?select=id,name,device&order=id`, accessToken),
+    supaGet(`activities?select=*&startTimeInSeconds=gte.${cutoffSec}&order=startTimeInSeconds.desc`, accessToken),
+    supaGet(`sleep?select=*&date=gte.${cutoffDate}`, accessToken),
+    supaGet(`plan_history?select=ownerId,weekStart,weekday,text&order=ownerId,weekStart,weekday`, accessToken),
+  ]);
+
+  RUNNERS = runnersRaw.map((r, i) => ({ ...r, slot: (i % 8) + 1 }));
+  ACTIVITIES = activitiesRaw;
+  SLEEP = sleepRaw;
+  PLAN_HISTORY = {};
+  for (const row of planRaw) {
+    PLAN_HISTORY[row.ownerId] ??= {};
+    PLAN_HISTORY[row.ownerId][row.weekStart] ??= new Array(7).fill(null);
+    PLAN_HISTORY[row.ownerId][row.weekStart][row.weekday] = row.text;
+  }
+  TODAY = new Date();
+  computeWeeks();
+
+  document.getElementById("badge").textContent = "נתונים אמיתיים · Supabase";
+  document.getElementById("subtitle").textContent = `${RUNNERS.length} מתאמנים · ${ACTIVITIES.length} ריצות`;
+  document.getElementById("signOutBtn").style.display = "";
+}
+
+function showLogin(errorMsg) {
+  document.getElementById("loginScreen").style.display = "flex";
+  document.getElementById("loginError").textContent = errorMsg || "";
+}
+function hideLogin() { document.getElementById("loginScreen").style.display = "none"; }
+
+async function attemptLoginFlow() {
+  const session = getSession();
+  if (session && session.access_token) {
+    try {
+      await loadFromSupabase(session.access_token);
+      hideLogin();
+      renderAll();
+      return;
+    } catch {
+      clearSession(); // token probably expired — fall through to the login form
+    }
+  }
+  showLogin();
+}
+
+async function doLogin() {
+  const email = document.getElementById("loginEmail").value.trim();
+  const password = document.getElementById("loginPassword").value;
+  const btn = document.getElementById("loginBtn");
+  btn.disabled = true;
+  document.getElementById("loginError").textContent = "";
+  try {
+    const session = await supabaseSignIn(email, password);
+    saveSession(session);
+    await loadFromSupabase(session.access_token);
+    hideLogin();
+    renderAll();
+  } catch (e) {
+    document.getElementById("loginError").textContent = "אימייל או סיסמה שגויים";
+  } finally {
+    btn.disabled = false;
+  }
+}
+document.getElementById("loginBtn").addEventListener("click", doLogin);
+document.getElementById("loginPassword").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+document.getElementById("signOutBtn").addEventListener("click", () => { clearSession(); location.reload(); });
+
 renderAll();
-loadReal().then(ok => { if (ok) renderAll(); });
+loadReal().then(ok => {
+  if (ok) { renderAll(); return; }
+  attemptLoginFlow();
+});
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);
 </script>
 </body>
