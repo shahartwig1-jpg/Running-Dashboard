@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="he" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>דשבורד קבוצת ריצה — דמו</title>
+<title>Running Group Dashboard — Demo</title>
 <style>
   :root {
     color-scheme: light;
@@ -182,7 +182,7 @@
   /* Table */
   .card table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .card th {
-    text-align: right; font-weight: 600; font-size: 12px; color: var(--text-muted);
+    text-align: start; font-weight: 600; font-size: 12px; color: var(--text-muted);
     padding: 6px 8px; border-bottom: 1px solid var(--baseline);
   }
   .card td { padding: 7px 8px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
@@ -217,7 +217,7 @@
   #overlay .section-title { font-size: 13px; font-weight: 600; margin: 18px 0 8px; }
   #overlay .chart-note { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
   #overlay table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  #overlay th { text-align: right; font-weight: 600; color: var(--text-muted); padding: 5px 6px; border-bottom: 1px solid var(--baseline); position: sticky; top: 0; background: var(--surface-1); }
+  #overlay th { text-align: start; font-weight: 600; color: var(--text-muted); padding: 5px 6px; border-bottom: 1px solid var(--baseline); position: sticky; top: 0; background: var(--surface-1); }
   #overlay td { padding: 5px 6px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
   #overlay .empty-note { font-size: 13px; color: var(--text-muted); padding: 20px 0; text-align: center; }
 
@@ -264,11 +264,11 @@
 <body>
 <div id="loginScreen">
   <div class="card">
-    <h2>🏃 דשבורד קבוצת ריצה</h2>
-    <div class="sub" style="font-size:12px;color:var(--text-muted)">התחברות לחברי הקבוצה בלבד</div>
-    <input type="email" id="loginEmail" placeholder="אימייל" autocomplete="username">
-    <input type="password" id="loginPassword" placeholder="סיסמה" autocomplete="current-password">
-    <button id="loginBtn" type="button">התחבר</button>
+    <h2>🏃 Running Group Dashboard</h2>
+    <div class="sub" style="font-size:12px;color:var(--text-muted)">Login for group members only</div>
+    <input type="email" id="loginEmail" placeholder="Email" autocomplete="username">
+    <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password">
+    <button id="loginBtn" type="button">Log in</button>
     <div class="error" id="loginError"></div>
   </div>
 </div>
@@ -277,48 +277,48 @@
   <div class="hero">
     <div class="hero-content">
       <header>
-        <h1>🏃 דשבורד קבוצת ריצה</h1>
-        <span class="demo-badge" id="badge">נתוני דמו</span>
-        <button id="signOutBtn" type="button" style="display:none">התנתק</button>
+        <h1>🏃 Running Group Dashboard</h1>
+        <span class="demo-badge" id="badge">Demo data</span>
+        <button id="signOutBtn" type="button" style="display:none">Sign out</button>
       </header>
-      <div class="subtitle" id="subtitle">חמישה מתאמנים · הנתונים מדמים את מה שיגיע מהשעונים אחרי חיבור אמיתי</div>
+      <div class="subtitle" id="subtitle">Five runners · demo data simulating what will arrive once watches are really connected</div>
     </div>
   </div>
 
-  <div class="filters" role="group" aria-label="טווח זמן">
-    <button data-days="7"  aria-pressed="true">7 ימים אחרונים</button>
-    <button data-days="30" aria-pressed="false">30 ימים אחרונים</button>
+  <div class="filters" role="group" aria-label="Time range">
+    <button data-days="7"  aria-pressed="true">Last 7 days</button>
+    <button data-days="30" aria-pressed="false">Last 30 days</button>
   </div>
 
-  <div class="filters" role="group" aria-label="מציג" id="runnerFilters"></div>
+  <div class="filters" role="group" aria-label="Showing" id="runnerFilters"></div>
 
   <div class="tiles" id="tiles"></div>
 
   <div class="cards" id="cardsRow">
     <div class="card" id="barCard">
-      <h2>ק״מ לפי רץ</h2>
+      <h2>Km per runner</h2>
       <div class="sub" id="barSub"></div>
       <div id="barChart"></div>
     </div>
     <div class="card">
-      <h2>ק״מ לפי יום בשבוע</h2>
+      <h2>Km per weekday</h2>
       <div class="sub" id="weekdaySub"></div>
-      <div dir="ltr" id="weekdayChart"></div>
+      <div id="weekdayChart"></div>
     </div>
   </div>
 
   <div class="card" id="sleepCard">
-    <h2>שעות שינה ממוצע</h2>
+    <h2>Avg sleep hours</h2>
     <div class="sub" id="sleepSub"></div>
     <div id="sleepChart"></div>
   </div>
 
   <div class="card" id="planCard">
     <div style="display:flex; align-items:baseline; justify-content:space-between; gap:8px; flex-wrap:wrap;">
-      <h2>תכנית האימונים השבועית</h2>
+      <h2>Weekly training plan</h2>
       <div style="display:flex; gap:6px;">
-        <button id="planPrev" class="week-nav-btn" type="button">‹ שבוע קודם</button>
-        <button id="planNext" class="week-nav-btn" type="button">שבוע הבא ›</button>
+        <button id="planPrev" class="week-nav-btn" type="button">‹ Previous week</button>
+        <button id="planNext" class="week-nav-btn" type="button">Next week ›</button>
       </div>
     </div>
     <div class="sub" id="planSub"></div>
@@ -326,19 +326,19 @@
   </div>
 
   <div class="card">
-    <h2>פעילויות אחרונות</h2>
+    <h2>Recent activities</h2>
     <div class="sub" id="tableSub"></div>
     <table>
       <thead>
-        <tr><th>תאריך</th><th>רץ</th><th>מרחק</th><th>זמן</th><th>קצב</th><th>דופק ממוצע</th><th>שעון</th></tr>
+        <tr><th>Date</th><th>Runner</th><th>Distance</th><th>Time</th><th>Pace</th><th>Avg HR</th><th>Watch</th></tr>
       </thead>
       <tbody id="tbody"></tbody>
     </table>
   </div>
 
   <footer>
-    הדשבורד מציג נתונים אמיתיים אם קיים הקובץ <code>data.json</code> (נוצר על ידי <code>node fetch-data.js</code>,
-    שמושך מ-Intervals.icu את הפעילויות שהגיעו מהשעונים), ואחרת חוזר לנתוני הדמו.
+    The dashboard shows real data when the file <code>data.json</code> exists (created by <code>node fetch-data.js</code>,
+    which pulls from Intervals.icu the activities that arrived from watches), and falls back to demo data otherwise.
   </footer>
 </div>
 
@@ -365,11 +365,11 @@ const rand = mulberry32(42);
 const between = (lo, hi) => lo + rand() * (hi - lo);
 
 const DEMO_RUNNERS = [
-  { id: "u1", name: "יואב",  device: "Forerunner 965", weeklyKm: 58, paceSec: 275, hr: 148, runs: 5, slot: 1 },
-  { id: "u2", name: "מיכל",  device: "Fenix 8",        weeklyKm: 44, paceSec: 305, hr: 152, runs: 4, slot: 2 },
-  { id: "u3", name: "עומר",  device: "Forerunner 265", weeklyKm: 35, paceSec: 330, hr: 156, runs: 4, slot: 3 },
-  { id: "u4", name: "נועה",  device: "Instinct 3",     weeklyKm: 28, paceSec: 350, hr: 149, runs: 3, slot: 4 },
-  { id: "u5", name: "שחר",   device: "Forerunner 55",  weeklyKm: 20, paceSec: 385, hr: 161, runs: 3, slot: 5 },
+  { id: "u1", name: "Yoav",   device: "Forerunner 965", weeklyKm: 58, paceSec: 275, hr: 148, runs: 5, slot: 1 },
+  { id: "u2", name: "Michal", device: "Fenix 8",        weeklyKm: 44, paceSec: 305, hr: 152, runs: 4, slot: 2 },
+  { id: "u3", name: "Omer",   device: "Forerunner 265", weeklyKm: 35, paceSec: 330, hr: 156, runs: 4, slot: 3 },
+  { id: "u4", name: "Noa",    device: "Instinct 3",     weeklyKm: 28, paceSec: 350, hr: 149, runs: 3, slot: 4 },
+  { id: "u5", name: "Shahar", device: "Forerunner 55",  weeklyKm: 20, paceSec: 385, hr: 161, runs: 3, slot: 5 },
 ];
 const colorOf = r => getComputedStyle(document.documentElement).getPropertyValue("--series-" + r.slot).trim();
 
@@ -413,7 +413,7 @@ function buildDemoActivities() {
           activityId: out.length + 1000,
           ownerId: runner.id,
           activityType: "RUNNING",
-          activityName: isLong ? "ריצה ארוכה" : (paceSec < runner.paceSec * 0.97 ? "אימון קצב" : "ריצה קלה"),
+          activityName: isLong ? "Long run" : (paceSec < runner.paceSec * 0.97 ? "Tempo workout" : "Easy run"),
           startTimeInSeconds: Math.floor(start.getTime() / 1000),
           distanceInMeters: Math.round(km * 1000),
           durationInSeconds: Math.round(km * paceSec),
@@ -443,7 +443,7 @@ SLEEP = buildDemoSleep();
 
 /* ---------- helpers ---------- */
 const km = a => a.distanceInMeters / 1000;
-const fmtKm = v => v.toLocaleString("he-IL", { maximumFractionDigits: 1 });
+const fmtKm = v => v.toLocaleString("en-US", { maximumFractionDigits: 1 });
 const fmtPace = secPerKm => {
   const m = Math.floor(secPerKm / 60), s = Math.round(secPerKm % 60);
   return m + ":" + String(s).padStart(2, "0");
@@ -452,11 +452,10 @@ const fmtDur = sec => {
   const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = Math.round(sec % 60);
   return h ? `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}` : `${m}:${String(s).padStart(2,"0")}`;
 };
-const fmtDate = ts => new Date(ts * 1000).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" });
 const runnerById = id => RUNNERS.find(r => r.id === id);
 const WEEKDAY_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]; // index = Date#getDay(), always Sun -> Sat, left to right
-const WEEKDAY_HE = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"]; // index = Date#getDay()
 const fmtDateEn = d => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+const fmtDate = ts => fmtDateEn(new Date(ts * 1000));
 
 const tooltip = document.getElementById("tooltip");
 function showTip(html, x, y) {
@@ -495,7 +494,7 @@ function thisWeekActs() {
 
 function renderRunnerFilters() {
   const el = document.getElementById("runnerFilters");
-  el.innerHTML = `<button data-runner="" aria-pressed="${selectedRunnerId === null}">כולם</button>` +
+  el.innerHTML = `<button data-runner="" aria-pressed="${selectedRunnerId === null}">All</button>` +
     RUNNERS.map(r => `<button data-runner="${r.id}" aria-pressed="${selectedRunnerId === r.id}">
       <span class="chip" style="background:${colorOf(r)}"></span>${r.name}</button>`).join("");
 }
@@ -508,10 +507,10 @@ function renderTiles() {
   const hrW = acts.reduce((s, a) => s + (a.averageHeartRateInBeatsPerMinute || 0) * a.durationInSeconds, 0);
   const weeklyKm = thisWeekActs().reduce((s, a) => s + km(a), 0);
   document.getElementById("tiles").innerHTML = `
-    <div class="tile"><div class="label">מרחק שבועי</div><div class="value">${fmtKm(weeklyKm)}<span class="unit">ק״מ</span></div></div>
-    <div class="tile"><div class="label">פעילויות</div><div class="value">${acts.length}</div></div>
-    <div class="tile"><div class="label">קצב ממוצע</div><div class="value">${fmtPace(avgPace)}<span class="unit">דק׳/ק״מ</span></div></div>
-    <div class="tile"><div class="label">דופק ממוצע</div><div class="value">${totalSec ? Math.round(hrW / totalSec) : 0}<span class="unit">bpm</span></div></div>`;
+    <div class="tile"><div class="label">Weekly distance</div><div class="value">${fmtKm(weeklyKm)}<span class="unit">km</span></div></div>
+    <div class="tile"><div class="label">Activities</div><div class="value">${acts.length}</div></div>
+    <div class="tile"><div class="label">Avg pace</div><div class="value">${fmtPace(avgPace)}<span class="unit">min/km</span></div></div>
+    <div class="tile"><div class="label">Avg HR</div><div class="value">${totalSec ? Math.round(hrW / totalSec) : 0}<span class="unit">bpm</span></div></div>`;
 }
 
 function renderBars() {
@@ -526,7 +525,7 @@ function renderBars() {
   cardsRow.classList.remove("single");
 
   // Always the current calendar week (Sun -> Sat), not the 7/30-day toggle — same
-  // convention as "מרחק שבועי" and "ק״מ לפי יום בשבוע", so all three agree.
+  // convention as "Weekly distance" and "Km per weekday", so all three agree.
   const acts = thisWeekActs();
   const per = RUNNERS.map(r => {
     const list = acts.filter(a => a.ownerId === r.id);
@@ -537,35 +536,35 @@ function renderBars() {
   const max = Math.max(...per.map(p => p.kmSum), 1);
   const wStart = weekStart(TODAY), wEnd = new Date(wStart.getTime() + 6 * DAY);
   document.getElementById("barSub").textContent =
-    `${wStart.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}–${wEnd.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })} (השבוע)`;
+    `${fmtDateEn(wStart)} – ${fmtDateEn(wEnd)} (this week)`;
   const el = document.getElementById("barChart");
   el.innerHTML = per.map(p => `
     <div class="bar-row" data-id="${p.r.id}">
       <div class="bar-name"><span class="chip" style="background:${colorOf(p.r)}"></span>${p.r.name}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${(p.kmSum / max * 100).toFixed(1)}%;background:${colorOf(p.r)}"></div></div>
-      <div class="bar-val">${fmtKm(p.kmSum)} ק״מ</div>
+      <div class="bar-val">${fmtKm(p.kmSum)} km</div>
     </div>`).join("");
   el.querySelectorAll(".bar-row").forEach(row => {
     const p = per.find(x => x.r.id === row.dataset.id);
     row.addEventListener("mousemove", e => showTip(
       `<div class="t-title">${p.r.name}</div>
-       <div class="t-row">ריצות<b>${p.n}</b></div>
-       <div class="t-row">מרחק<b>${fmtKm(p.kmSum)} ק״מ</b></div>
-       <div class="t-row">קצב ממוצע<b>${fmtPace(p.pace)} דק׳/ק״מ</b></div>`, e.clientX, e.clientY));
+       <div class="t-row">Runs<b>${p.n}</b></div>
+       <div class="t-row">Distance<b>${fmtKm(p.kmSum)} km</b></div>
+       <div class="t-row">Avg pace<b>${fmtPace(p.pace)} min/km</b></div>`, e.clientX, e.clientY));
     row.addEventListener("mouseleave", hideTip);
   });
 }
 
 function fmtHoursMin(hours) {
   const h = Math.floor(hours), m = Math.round((hours - h) * 60);
-  return `${h}:${String(m).padStart(2, "0")} שעות`;
+  return `${h}:${String(m).padStart(2, "0")} hours`;
 }
 
 function renderSleep() {
   const card = document.getElementById("sleepCard");
   card.style.display = "";
   document.getElementById("sleepSub").textContent =
-    (rangeDays === 7 ? "7 הימים האחרונים" : "30 הימים האחרונים") +
+    (rangeDays === 7 ? "Last 7 days" : "Last 30 days") +
     (selectedRunnerId !== null ? " · " + runnerById(selectedRunnerId).name : "");
 
   const cutoff = TODAY.getTime() - rangeDays * DAY;
@@ -578,7 +577,7 @@ function renderSleep() {
 
   const el = document.getElementById("sleepChart");
   if (!per.some(p => p.avgHours != null)) {
-    el.innerHTML = `<div class="empty-note">אין נתוני שינה עדיין</div>`;
+    el.innerHTML = `<div class="empty-note">No sleep data yet</div>`;
     return;
   }
   const max = Math.max(...per.map(p => p.avgHours || 0), 1);
@@ -586,7 +585,7 @@ function renderSleep() {
     <div class="bar-row">
       <div class="bar-name"><span class="chip" style="background:${colorOf(p.r)}"></span>${p.r.name}</div>
       <div class="bar-track">${p.avgHours != null ? `<div class="bar-fill" style="width:${(p.avgHours / max * 100).toFixed(1)}%;background:${colorOf(p.r)}"></div>` : ""}</div>
-      <div class="bar-val">${p.avgHours != null ? fmtHoursMin(p.avgHours) : "אין נתונים"}</div>
+      <div class="bar-val">${p.avgHours != null ? fmtHoursMin(p.avgHours) : "No data"}</div>
     </div>`).join("");
 }
 
@@ -597,8 +596,8 @@ function renderPlan() {
   const prevBtn = document.getElementById("planPrev"), nextBtn = document.getElementById("planNext");
 
   if (selectedRunnerId === null) {
-    sub.textContent = "בחר רץ למעלה כדי לראות את התכנית שלו";
-    el.innerHTML = `<div class="empty-note">התכנית היא אישית לכל רץ — בחר שם מהרשימה למעלה</div>`;
+    sub.textContent = "Select a runner above to see their plan";
+    el.innerHTML = `<div class="empty-note">The plan is personal to each runner — pick a name from the list above</div>`;
     prevBtn.disabled = true; nextBtn.disabled = true;
     return;
   }
@@ -610,21 +609,21 @@ function renderPlan() {
   const weekStartStr = start.toISOString().slice(0, 10);
   const days = (PLAN_HISTORY[selectedRunnerId] || {})[weekStartStr];
   const weekEnd = new Date(start.getTime() + 6 * DAY);
-  const rangeLabel = `${start.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}–${weekEnd.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}`;
-  sub.textContent = `${r.name} · ${rangeLabel}` + (planWeekOffset === 0 ? " (השבוע)" : "");
+  const rangeLabel = `${fmtDateEn(start)} – ${fmtDateEn(weekEnd)}`;
+  sub.textContent = `${r.name} · ${rangeLabel}` + (planWeekOffset === 0 ? " (this week)" : "");
 
   if (!days) {
-    el.innerHTML = `<div class="empty-note">אין תכנית שמורה לשבוע הזה</div>`;
+    el.innerHTML = `<div class="empty-note">No plan saved for this week</div>`;
     return;
   }
   const todayIdx = planWeekOffset === 0 ? TODAY.getDay() : -1;
   el.innerHTML = days.map((text, i) => {
     const d = new Date(start.getTime() + i * DAY);
     const isToday = i === todayIdx;
-    const isRest = /מנוחה/.test(text || "");
+    const isRest = /מנוחה|rest/i.test(text || "");
     return `<div class="plan-row${isToday ? " today" : ""}${isRest ? " plan-rest" : ""}">
-      <div class="plan-day">${WEEKDAY_HE[i]}</div>
-      <div class="plan-date">${d.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })}</div>
+      <div class="plan-day">${WEEKDAY_EN[i]}</div>
+      <div class="plan-date">${fmtDateEn(d)}</div>
       <div class="plan-text">${text || "—"}</div>
     </div>`;
   }).join("");
@@ -643,7 +642,7 @@ function renderWeekday() {
 
   const el = document.getElementById("weekdayChart");
   if (!acts.length) {
-    el.innerHTML = `<div class="empty-note">אין ריצות השבוע</div>`;
+    el.innerHTML = `<div class="empty-note">No runs this week</div>`;
     return;
   }
 
@@ -686,8 +685,8 @@ function renderWeekday() {
     const i = +rect.dataset.day;
     rect.addEventListener("mousemove", e => showTip(
       `<div class="t-title">${WEEKDAY_EN[i]} · ${fmtDateEn(dayDates[i])}</div>
-       <div class="t-row">סה״כ ק״מ<b>${fmtKm(sums[i])}</b></div>
-       <div class="t-row">ריצות<b>${counts[i]}</b></div>`, e.clientX, e.clientY));
+       <div class="t-row">Total km<b>${fmtKm(sums[i])}</b></div>
+       <div class="t-row">Runs<b>${counts[i]}</b></div>`, e.clientX, e.clientY));
     rect.addEventListener("mouseleave", hideTip);
   });
 }
@@ -696,18 +695,18 @@ function renderTable() {
   const all = scoped();
   const acts = all.slice(0, 14);
   document.getElementById("tableSub").textContent =
-    (rangeDays === 7 ? "7 הימים האחרונים" : "30 הימים האחרונים") +
+    (rangeDays === 7 ? "Last 7 days" : "Last 30 days") +
     (selectedRunnerId !== null ? " · " + runnerById(selectedRunnerId).name : "") +
-    (all.length > 14 ? " · 14 אחרונות" : "");
+    (all.length > 14 ? " · last 14" : "");
   document.getElementById("tbody").innerHTML = acts.map(a => {
     const r = runnerById(a.ownerId);
     const pace = a.durationInSeconds / km(a);
     return `<tr data-activity-id="${a.activityId}">
       <td>${fmtDate(a.startTimeInSeconds)}</td>
       <td><span class="runner-cell"><span class="chip" style="background:${colorOf(r)}"></span>${r.name}</span></td>
-      <td>${fmtKm(km(a))} ק״מ</td>
+      <td>${fmtKm(km(a))} km</td>
       <td>${fmtDur(a.durationInSeconds)}</td>
-      <td>${fmtPace(pace)} דק׳/ק״מ</td>
+      <td>${fmtPace(pace)} min/km</td>
       <td>${a.averageHeartRateInBeatsPerMinute}</td>
       <td class="device">${a.deviceName}</td>
     </tr>`;
@@ -744,7 +743,7 @@ function downsample(xs, ys, target = 220) {
 function miniLineChart(xs, ys, { color, yFmt, yTicks = 4, unitLabel }) {
   const W = 480, H = 130, m = { t: 8, r: 10, b: 20, l: 40 };
   const pts = xs.map((x, i) => [x, ys[i]]).filter(([, y]) => y != null);
-  if (pts.length < 2) return `<div class="empty-note">אין מספיק נתונים לגרף</div>`;
+  if (pts.length < 2) return `<div class="empty-note">Not enough data for a chart</div>`;
   const xVals = pts.map(p => p[0]), yVals = pts.map(p => p[1]);
   const xMin = Math.min(...xVals), xMax = Math.max(...xVals);
   const yMin = Math.min(...yVals), yMax = Math.max(...yVals);
@@ -803,37 +802,37 @@ async function openDetail(activityId) {
   sheet.innerHTML = `
     <div class="sheet-head">
       <div>
-        <h3>${a ? a.activityName : "ריצה"}</h3>
+        <h3>${a ? a.activityName : "Run"}</h3>
         <div class="sheet-sub">${r ? r.name + " · " : ""}${a ? fmtDate(a.startTimeInSeconds) : ""}</div>
       </div>
-      <button class="close-btn" id="closeSheet">סגור ✕</button>
+      <button class="close-btn" id="closeSheet">Close ✕</button>
     </div>
-    <div id="sheetBody"><div class="empty-note">טוען פרטים…</div></div>`;
+    <div id="sheetBody"><div class="empty-note">Loading details…</div></div>`;
   document.getElementById("overlay").style.display = "block";
   document.getElementById("closeSheet").addEventListener("click", closeDetail);
 
   const detail = await loadDetail(activityId);
   const body = document.getElementById("sheetBody");
   if (!detail) {
-    body.innerHTML = `<div class="empty-note">אין פרטים (הפסקות/גרפים) לריצה הזו עדיין.<br>
-      פרטים נמשכים רק ל-20 הריצות האחרונות — הרץ <code>node fetch-data.js</code> שוב אם זו ריצה חדשה.</div>`;
+    body.innerHTML = `<div class="empty-note">No details (laps/charts) for this run yet.<br>
+      Details are only kept for the last 20 runs — rerun <code>node fetch-data.js</code> if this is a new run.</div>`;
     return;
   }
 
   const tilesHtml = a ? `
     <div class="mini-tiles">
-      <div class="mini-tile"><div class="label">מרחק</div><div class="value">${fmtKm(km(a))} ק״מ</div></div>
-      <div class="mini-tile"><div class="label">זמן</div><div class="value">${fmtDur(a.durationInSeconds)}</div></div>
-      <div class="mini-tile"><div class="label">קצב ממוצע</div><div class="value">${fmtPace(a.durationInSeconds / km(a))}</div></div>
-      <div class="mini-tile"><div class="label">דופק ממוצע</div><div class="value">${a.averageHeartRateInBeatsPerMinute ?? "-"}</div></div>
+      <div class="mini-tile"><div class="label">Distance</div><div class="value">${fmtKm(km(a))} km</div></div>
+      <div class="mini-tile"><div class="label">Time</div><div class="value">${fmtDur(a.durationInSeconds)}</div></div>
+      <div class="mini-tile"><div class="label">Avg pace</div><div class="value">${fmtPace(a.durationInSeconds / km(a))}</div></div>
+      <div class="mini-tile"><div class="label">Avg HR</div><div class="value">${a.averageHeartRateInBeatsPerMinute ?? "-"}</div></div>
     </div>` : "";
 
-  let lapsHtml = `<div class="empty-note">אין נתוני הפסקות</div>`;
+  let lapsHtml = `<div class="empty-note">No lap data</div>`;
   if (detail.laps && detail.laps.length) {
-    lapsHtml = `<table><thead><tr><th>#</th><th>מרחק</th><th>קצב</th><th>דופק</th><th>קדנס</th></tr></thead><tbody>` +
+    lapsHtml = `<table><thead><tr><th>#</th><th>Distance</th><th>Pace</th><th>HR</th><th>Cadence</th></tr></thead><tbody>` +
       detail.laps.map((l, i) => `<tr>
         <td>${i + 1}</td>
-        <td>${l.distanceInMeters != null ? fmtKm(l.distanceInMeters / 1000) : "-"} ק״מ</td>
+        <td>${l.distanceInMeters != null ? fmtKm(l.distanceInMeters / 1000) : "-"} km</td>
         <td>${l.paceSecPerKm ? fmtPace(l.paceSecPerKm) : "-"}</td>
         <td>${l.averageHeartRateInBeatsPerMinute ?? "-"}</td>
         <td>${l.averageCadence ?? "-"}</td>
@@ -846,15 +845,15 @@ async function openDetail(activityId) {
     const { x: xHr, y: yHr } = downsample(distKm, detail.streams.heartrate);
     const { x: xPc, y: yPc } = downsample(distKm, detail.streams.paceSecPerKm);
     chartsHtml = `
-      <div class="section-title">דופק לאורך הריצה</div>
-      ${miniLineChart(xHr, yHr, { color: "var(--series-6)", yFmt: v => Math.round(v), unitLabel: "דופק" })}
-      <div class="section-title">קצב לאורך הריצה</div>
-      ${miniLineChart(xPc, yPc, { color: "var(--series-1)", yFmt: v => fmtPace(v), unitLabel: "קצב" })}
-      <div class="chart-note">ציר X: מרחק (ק״מ) · קצב נמוך יותר = ריצה מהירה יותר</div>`;
+      <div class="section-title">Heart rate over the run</div>
+      ${miniLineChart(xHr, yHr, { color: "var(--series-6)", yFmt: v => Math.round(v), unitLabel: "HR" })}
+      <div class="section-title">Pace over the run</div>
+      ${miniLineChart(xPc, yPc, { color: "var(--series-1)", yFmt: v => fmtPace(v), unitLabel: "Pace" })}
+      <div class="chart-note">X axis: distance (km) · lower pace = faster running</div>`;
   }
 
   body.innerHTML = tilesHtml +
-    `<div class="section-title">הפסקות (${detail.laps?.length || 0})</div>${lapsHtml}` +
+    `<div class="section-title">Laps (${detail.laps?.length || 0})</div>${lapsHtml}` +
     chartsHtml;
 }
 
@@ -863,10 +862,10 @@ document.getElementById("overlay").addEventListener("click", e => { if (e.target
 
 function renderAll() { renderRunnerFilters(); renderTiles(); renderBars(); renderSleep(); renderPlan(); renderWeekday(); renderTable(); }
 
-document.querySelectorAll('.filters[aria-label="טווח זמן"] button').forEach(btn => {
+document.querySelectorAll('.filters[aria-label="Time range"] button').forEach(btn => {
   btn.addEventListener("click", () => {
     rangeDays = +btn.dataset.days;
-    document.querySelectorAll('.filters[aria-label="טווח זמן"] button')
+    document.querySelectorAll('.filters[aria-label="Time range"] button')
       .forEach(b => b.setAttribute("aria-pressed", b === btn ? "true" : "false"));
     renderAll();
   });
@@ -900,10 +899,10 @@ async function loadReal() {
   TODAY = new Date();
   computeWeeks();
 
-  const when = d.generatedAt ? new Date(d.generatedAt).toLocaleString("he-IL", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
-  document.getElementById("badge").textContent = "נתונים אמיתיים · " + (d.source || "");
+  const when = d.generatedAt ? new Date(d.generatedAt).toLocaleString("en-US", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+  document.getElementById("badge").textContent = "Real data · " + (d.source || "");
   document.getElementById("subtitle").textContent =
-    `${RUNNERS.length} מתאמנים · ${ACTIVITIES.length} ריצות` + (when ? ` · עודכן ${when}` : "");
+    `${RUNNERS.length} runners · ${ACTIVITIES.length} runs` + (when ? ` · updated ${when}` : "");
   return true;
 }
 
@@ -959,8 +958,8 @@ async function loadFromSupabase(accessToken) {
   TODAY = new Date();
   computeWeeks();
 
-  document.getElementById("badge").textContent = "נתונים אמיתיים · Supabase";
-  document.getElementById("subtitle").textContent = `${RUNNERS.length} מתאמנים · ${ACTIVITIES.length} ריצות`;
+  document.getElementById("badge").textContent = "Real data · Supabase";
+  document.getElementById("subtitle").textContent = `${RUNNERS.length} runners · ${ACTIVITIES.length} runs`;
   document.getElementById("signOutBtn").style.display = "";
 }
 
@@ -998,7 +997,7 @@ async function doLogin() {
     hideLogin();
     renderAll();
   } catch (e) {
-    document.getElementById("loginError").textContent = "אימייל או סיסמה שגויים";
+    document.getElementById("loginError").textContent = "Wrong email or password";
   } finally {
     btn.disabled = false;
   }
