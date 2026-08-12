@@ -221,6 +221,40 @@
   #overlay td { padding: 5px 6px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
   #overlay .empty-note { font-size: 13px; color: var(--text-muted); padding: 20px 0; text-align: center; }
 
+  /* Kudos + comments — Strava/Garmin-style activity feed */
+  .kudos-btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+    padding: 7px 16px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--page); color: var(--text-secondary);
+  }
+  .kudos-btn:hover { border-color: var(--baseline); }
+  .kudos-btn.given { background: rgba(42,120,214,0.14); border-color: var(--series-1); color: var(--series-1); }
+  .kudos-avatars { display: flex; align-items: center; margin-top: 10px; }
+  .kudos-avatars .avatar { margin-inline-end: -8px; border: 2px solid var(--surface-1); }
+  .comment-item { display: flex; gap: 9px; padding: 9px 0; }
+  .avatar {
+    flex: 0 0 28px; width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 12px; font-weight: 700;
+  }
+  .comment-body { flex: 1; min-width: 0; }
+  .comment-header { display: flex; align-items: baseline; gap: 7px; }
+  .comment-author { font-weight: 600; font-size: 13px; }
+  .comment-time { font-size: 11px; color: var(--text-muted); }
+  .comment-text { font-size: 13px; color: var(--text-secondary); margin-top: 1px; }
+  .comment-input-row { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+  .comment-input-row input {
+    flex: 1; font: inherit; font-size: 13px; padding: 9px 14px;
+    border: 1px solid var(--border); border-radius: 999px; background: var(--page); color: var(--text-primary);
+  }
+  .comment-send-btn {
+    flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; border: none;
+    background: var(--series-1); color: #fff; cursor: pointer; font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .comment-send-btn:hover { opacity: 0.9; }
+
   /* Tooltip */
   #tooltip {
     position: fixed; z-index: 10; pointer-events: none; display: none;
@@ -330,7 +364,7 @@
     <div class="sub" id="tableSub"></div>
     <table>
       <thead>
-        <tr><th>Date</th><th>Runner</th><th>Distance</th><th>Time</th><th>Pace</th><th>Avg HR</th><th>Watch</th></tr>
+        <tr><th>Date</th><th>Runner</th><th>Distance</th><th>Time</th><th>Pace</th><th>Avg HR</th><th>Watch</th><th>👍</th></tr>
       </thead>
       <tbody id="tbody"></tbody>
     </table>
@@ -709,10 +743,29 @@ function renderTable() {
       <td>${fmtPace(pace)} min/km</td>
       <td>${a.averageHeartRateInBeatsPerMinute}</td>
       <td class="device">${a.deviceName}</td>
+      <td class="kudos-cell" data-kudos-for="${a.activityId}" style="color:var(--text-muted)">–</td>
     </tr>`;
   }).join("");
   document.getElementById("tbody").querySelectorAll("tr").forEach(tr => {
     tr.addEventListener("click", () => openDetail(tr.dataset.activityId));
+  });
+  loadKudosCounts(acts.map(a => a.activityId));
+}
+
+async function loadKudosCounts(activityIds) {
+  const session = getSession();
+  if (!session?.access_token || !activityIds.length) return;
+  let rows;
+  try {
+    const idList = activityIds.map(id => encodeURIComponent(id)).join(",");
+    rows = await supaGet(`likes?activityId=in.(${idList})&select=activityId`, session.access_token);
+  } catch { return; }
+  const counts = {};
+  rows.forEach(row => { counts[row.activityId] = (counts[row.activityId] || 0) + 1; });
+  document.querySelectorAll("[data-kudos-for]").forEach(cell => {
+    const n = counts[cell.dataset.kudosFor] || 0;
+    cell.textContent = n ? String(n) : "–";
+    if (n) cell.style.color = "var(--series-1)";
   });
 }
 
@@ -861,11 +914,11 @@ async function openDetail(activityId) {
 
 async function loadEngagement(activityId) {
   const setHtml = html => { const el = document.getElementById("engagement"); if (el) el.innerHTML = html; };
-  setHtml(`<div class="section-title">Likes & comments</div><div class="empty-note">Loading…</div>`);
+  setHtml(`<div class="section-title">Kudos & comments</div><div class="empty-note">Loading…</div>`);
 
   const session = getSession();
   if (!session?.access_token) {
-    setHtml(`<div class="section-title">Likes & comments</div><div class="empty-note">Log in (top of the page) to view and add likes/comments.</div>`);
+    setHtml(`<div class="section-title">Kudos & comments</div><div class="empty-note">Log in (top of the page) to view and add kudos/comments.</div>`);
     return;
   }
   const token = session.access_token;
@@ -877,23 +930,37 @@ async function loadEngagement(activityId) {
       supaGet(`comments?activityId=eq.${encodeURIComponent(activityId)}&select=authorName,text,createdAt&order=createdAt.asc`, token),
     ]);
   } catch {
-    setHtml(`<div class="section-title">Likes & comments</div><div class="empty-note">Couldn't load — try again later.</div>`);
+    setHtml(`<div class="section-title">Kudos & comments</div><div class="empty-note">Couldn't load — try again later.</div>`);
     return;
   }
   if (!document.getElementById("engagement")) return; // panel closed/changed while this was loading
 
   const iLiked = likes.some(l => l.authorName === me);
+  const otherLikers = likes.map(l => l.authorName).filter(n => n !== me);
+  const likerNames = (iLiked ? ["You"] : []).concat(otherLikers);
   setHtml(`
-    <div class="section-title">Likes & comments</div>
-    <button id="likeBtn" class="week-nav-btn">${iLiked ? "💔 Unlike" : "❤️ Like"} (${likes.length})</button>
-    <div id="commentsList" style="margin-top:12px;">${comments.length ? comments.map(c => `
-      <div style="margin-bottom:8px;">
-        <b>${c.authorName}</b> <span style="color:var(--text-muted);font-size:11px;">${new Date(c.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
-        <div>${c.text}</div>
-      </div>`).join("") : `<div class="empty-note">No comments yet</div>`}</div>
-    <div style="display:flex; gap:6px; margin-top:10px;">
-      <input type="text" id="commentInput" placeholder="Add a comment…" style="flex:1; font: inherit; font-size:13px; padding:7px 10px; border:1px solid var(--border); border-radius:8px; background:var(--page); color:var(--text-primary);">
-      <button id="commentBtn" class="week-nav-btn">Post</button>
+    <div class="section-title">Kudos & comments</div>
+    <button id="likeBtn" class="kudos-btn${iLiked ? " given" : ""}">👍 Kudos${likes.length ? ` (${likes.length})` : ""}</button>
+    ${likerNames.length ? `
+      <div class="kudos-avatars">
+        ${likerNames.slice(0, 8).map(n => avatarHtml(n === "You" ? me : n)).join("")}
+        <span style="margin-inline-start:10px; font-size:12px; color:var(--text-muted)">${likerNames.join(", ")}</span>
+      </div>` : ""}
+    <div id="commentsList" style="margin-top:14px;">${comments.length ? comments.map(c => `
+      <div class="comment-item">
+        ${avatarHtml(c.authorName)}
+        <div class="comment-body">
+          <div class="comment-header">
+            <span class="comment-author">${c.authorName}</span>
+            <span class="comment-time">${new Date(c.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+          </div>
+          <div class="comment-text">${c.text}</div>
+        </div>
+      </div>`).join("") : `<div class="empty-note">No comments yet — be the first</div>`}</div>
+    <div class="comment-input-row">
+      ${avatarHtml(me)}
+      <input type="text" id="commentInput" placeholder="Write a comment…">
+      <button id="commentBtn" class="comment-send-btn" title="Post">➤</button>
     </div>`);
 
   document.getElementById("likeBtn").addEventListener("click", async () => {
@@ -1017,6 +1084,17 @@ function authorNameFromSession() {
   const s = getSession();
   const email = s?.user?.email || "";
   return email.split("@")[0] || "Someone";
+}
+
+// Deterministic color per name (no profile pictures to draw avatars from), same idea
+// Slack/Discord use for initial-letter avatars.
+function colorFromName(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return `hsl(${Math.abs(hash) % 360}, 55%, 45%)`;
+}
+function avatarHtml(name) {
+  return `<div class="avatar" style="background:${colorFromName(name)}">${(name[0] || "?").toUpperCase()}</div>`;
 }
 
 async function loadFromSupabase(accessToken) {
