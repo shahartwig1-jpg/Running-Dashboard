@@ -179,7 +179,22 @@
   .plan-row.today .plan-text { color: var(--text-primary); font-weight: 600; }
   .plan-rest .plan-text { color: var(--text-muted); }
 
-  /* Table */
+  /* Activity feed (Strava/Garmin-style, replaces the old plain table) */
+  .feed-item { display: flex; gap: 12px; padding: 14px 4px; border-bottom: 1px solid var(--grid); cursor: pointer; }
+  .feed-item:last-child { border-bottom: none; }
+  .feed-item:hover { background: var(--grid); border-radius: 8px; }
+  .feed-main { flex: 1; min-width: 0; }
+  .feed-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+  .feed-name { font-weight: 600; font-size: 13px; }
+  .feed-time { font-size: 11px; color: var(--text-muted); }
+  .feed-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .feed-stats { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+  .feed-stats b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .feed-photo { width: 100%; max-height: 220px; object-fit: cover; border-radius: 10px; margin-bottom: 8px; display: block; }
+  .feed-engagement { display: flex; gap: 14px; font-size: 12px; color: var(--text-muted); }
+  .feed-engagement span.active { color: var(--series-1); font-weight: 600; }
+
+  /* Table (still used inside the detail panel for laps) */
   .card table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .card th {
     text-align: start; font-weight: 600; font-size: 12px; color: var(--text-muted);
@@ -254,6 +269,13 @@
     display: flex; align-items: center; justify-content: center;
   }
   .comment-send-btn:hover { opacity: 0.9; }
+  .photo-gallery { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .photo-gallery img { width: 84px; height: 84px; object-fit: cover; border-radius: 8px; cursor: pointer; }
+  .add-photo-btn {
+    font: inherit; font-size: 12px; cursor: pointer; color: var(--text-secondary);
+    background: var(--page); border: 1px dashed var(--baseline); border-radius: 8px; padding: 6px 12px;
+  }
+  .add-photo-btn:hover { border-color: var(--series-1); color: var(--series-1); }
 
   /* Tooltip */
   #tooltip {
@@ -362,12 +384,7 @@
   <div class="card">
     <h2>Recent activities</h2>
     <div class="sub" id="tableSub"></div>
-    <table>
-      <thead>
-        <tr><th>Date</th><th>Runner</th><th>Distance</th><th>Time</th><th>Pace</th><th>Avg HR</th><th>Watch</th><th>👍</th></tr>
-      </thead>
-      <tbody id="tbody"></tbody>
-    </table>
+    <div id="feedList"></div>
   </div>
 
   <footer>
@@ -725,48 +742,88 @@ function renderWeekday() {
   });
 }
 
-function renderTable() {
+function renderFeed() {
   const all = scoped();
   const acts = all.slice(0, 14);
   document.getElementById("tableSub").textContent =
     (rangeDays === 7 ? "Last 7 days" : "Last 30 days") +
     (selectedRunnerId !== null ? " · " + runnerById(selectedRunnerId).name : "") +
     (all.length > 14 ? " · last 14" : "");
-  document.getElementById("tbody").innerHTML = acts.map(a => {
+
+  const el = document.getElementById("feedList");
+  if (!acts.length) {
+    el.innerHTML = `<div class="empty-note">No activities in this range</div>`;
+    return;
+  }
+  el.innerHTML = acts.map(a => {
     const r = runnerById(a.ownerId);
     const pace = a.durationInSeconds / km(a);
-    return `<tr data-activity-id="${a.activityId}">
-      <td>${fmtDate(a.startTimeInSeconds)}</td>
-      <td><span class="runner-cell"><span class="chip" style="background:${colorOf(r)}"></span>${r.name}</span></td>
-      <td>${fmtKm(km(a))} km</td>
-      <td>${fmtDur(a.durationInSeconds)}</td>
-      <td>${fmtPace(pace)} min/km</td>
-      <td>${a.averageHeartRateInBeatsPerMinute}</td>
-      <td class="device">${a.deviceName}</td>
-      <td class="kudos-cell" data-kudos-for="${a.activityId}" style="color:var(--text-muted)">–</td>
-    </tr>`;
+    return `<div class="feed-item" data-activity-id="${a.activityId}">
+      <div class="avatar" style="background:${colorOf(r)}">${(r.name[0] || "?").toUpperCase()}</div>
+      <div class="feed-main">
+        <div class="feed-head">
+          <span class="feed-name">${r.name}</span>
+          <span class="feed-time">${fmtDate(a.startTimeInSeconds)}</span>
+        </div>
+        <div class="feed-title">${a.activityName || "Run"}</div>
+        <div class="feed-stats">
+          <span><b>${fmtKm(km(a))}</b> km</span>
+          <span><b>${fmtDur(a.durationInSeconds)}</b></span>
+          <span><b>${fmtPace(pace)}</b> min/km</span>
+          <span><b>${a.averageHeartRateInBeatsPerMinute ?? "-"}</b> bpm</span>
+          <span class="device">${a.deviceName}</span>
+        </div>
+        <img class="feed-photo" data-photo-for="${a.activityId}" style="display:none">
+        <div class="feed-engagement">
+          <span data-kudos-for="${a.activityId}">👍 –</span>
+          <span data-comments-for="${a.activityId}">💬 –</span>
+        </div>
+      </div>
+    </div>`;
   }).join("");
-  document.getElementById("tbody").querySelectorAll("tr").forEach(tr => {
-    tr.addEventListener("click", () => openDetail(tr.dataset.activityId));
+  el.querySelectorAll(".feed-item").forEach(item => {
+    item.addEventListener("click", () => openDetail(item.dataset.activityId));
   });
-  loadKudosCounts(acts.map(a => a.activityId));
+  loadFeedEngagement(acts.map(a => a.activityId));
 }
 
-async function loadKudosCounts(activityIds) {
+async function loadFeedEngagement(activityIds) {
   const session = getSession();
   if (!session?.access_token || !activityIds.length) return;
-  let rows;
+  const token = session.access_token;
+  const idList = activityIds.map(id => encodeURIComponent(id)).join(",");
+
   try {
-    const idList = activityIds.map(id => encodeURIComponent(id)).join(",");
-    rows = await supaGet(`likes?activityId=in.(${idList})&select=activityId`, session.access_token);
-  } catch { return; }
-  const counts = {};
-  rows.forEach(row => { counts[row.activityId] = (counts[row.activityId] || 0) + 1; });
-  document.querySelectorAll("[data-kudos-for]").forEach(cell => {
-    const n = counts[cell.dataset.kudosFor] || 0;
-    cell.textContent = n ? String(n) : "–";
-    if (n) cell.style.color = "var(--series-1)";
-  });
+    const likes = await supaGet(`likes?activityId=in.(${idList})&select=activityId`, token);
+    const counts = {};
+    likes.forEach(row => { counts[row.activityId] = (counts[row.activityId] || 0) + 1; });
+    document.querySelectorAll("[data-kudos-for]").forEach(el => {
+      const n = counts[el.dataset.kudosFor] || 0;
+      el.textContent = `👍 ${n || "–"}`;
+      if (n) el.classList.add("active");
+    });
+  } catch { }
+
+  try {
+    const comments = await supaGet(`comments?activityId=in.(${idList})&select=activityId`, token);
+    const counts = {};
+    comments.forEach(row => { counts[row.activityId] = (counts[row.activityId] || 0) + 1; });
+    document.querySelectorAll("[data-comments-for]").forEach(el => {
+      const n = counts[el.dataset.commentsFor] || 0;
+      el.textContent = `💬 ${n || "–"}`;
+    });
+  } catch { }
+
+  try {
+    const photos = await supaGet(`activity_photos?activityId=in.(${idList})&select=activityId,url&order=createdAt.desc`, token);
+    const seen = new Set();
+    photos.forEach(p => {
+      if (seen.has(p.activityId)) return; // most recent photo per activity only
+      seen.add(p.activityId);
+      const target = document.querySelector(`img[data-photo-for="${p.activityId}"]`);
+      if (target) { target.src = p.url; target.style.display = "block"; }
+    });
+  } catch { } // activity_photos table may not exist yet — fine, feed just shows no photos
 }
 
 /* ---------- per-activity detail panel: laps + streams (real data only) ---------- */
@@ -923,11 +980,12 @@ async function loadEngagement(activityId) {
   }
   const token = session.access_token;
   const me = authorNameFromSession();
-  let likes, comments;
+  let likes, comments, photos;
   try {
-    [likes, comments] = await Promise.all([
+    [likes, comments, photos] = await Promise.all([
       supaGet(`likes?activityId=eq.${encodeURIComponent(activityId)}&select=authorName`, token),
       supaGet(`comments?activityId=eq.${encodeURIComponent(activityId)}&select=authorName,text,createdAt&order=createdAt.asc`, token),
+      supaGet(`activity_photos?activityId=eq.${encodeURIComponent(activityId)}&select=url,authorName&order=createdAt.desc`, token).catch(() => []),
     ]);
   } catch {
     setHtml(`<div class="section-title">Kudos & comments</div><div class="empty-note">Couldn't load — try again later.</div>`);
@@ -939,7 +997,12 @@ async function loadEngagement(activityId) {
   const otherLikers = likes.map(l => l.authorName).filter(n => n !== me);
   const likerNames = (iLiked ? ["You"] : []).concat(otherLikers);
   setHtml(`
-    <div class="section-title">Kudos & comments</div>
+    <div class="section-title">Photos</div>
+    ${photos.length ? `<div class="photo-gallery">${photos.map(p => `<img src="${p.url}" alt="Photo by ${p.authorName}">`).join("")}</div>` : ""}
+    <label class="add-photo-btn">📷 Add photo<input type="file" id="photoInput" accept="image/*" style="display:none"></label>
+    <div id="photoStatus" style="font-size:11px; color:var(--text-muted); margin-top:4px;"></div>
+
+    <div class="section-title" style="margin-top:20px;">Kudos & comments</div>
     <button id="likeBtn" class="kudos-btn${iLiked ? " given" : ""}">👍 Kudos${likes.length ? ` (${likes.length})` : ""}</button>
     ${likerNames.length ? `
       <div class="kudos-avatars">
@@ -962,6 +1025,19 @@ async function loadEngagement(activityId) {
       <input type="text" id="commentInput" placeholder="Write a comment…">
       <button id="commentBtn" class="comment-send-btn" title="Post">➤</button>
     </div>`);
+
+  document.getElementById("photoInput").addEventListener("change", async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const status = document.getElementById("photoStatus");
+    status.textContent = "Uploading…";
+    try {
+      await uploadPhoto(activityId, file, me, token);
+      loadEngagement(activityId);
+    } catch {
+      status.textContent = "Upload failed — try again.";
+    }
+  });
 
   document.getElementById("likeBtn").addEventListener("click", async () => {
     try {
@@ -986,7 +1062,7 @@ async function loadEngagement(activityId) {
 function closeDetail() { document.getElementById("overlay").style.display = "none"; }
 document.getElementById("overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeDetail(); });
 
-function renderAll() { renderRunnerFilters(); renderTiles(); renderBars(); renderSleep(); renderPlan(); renderWeekday(); renderTable(); }
+function renderAll() { renderRunnerFilters(); renderTiles(); renderBars(); renderSleep(); renderPlan(); renderWeekday(); renderFeed(); }
 
 document.querySelectorAll('.filters[aria-label="Time range"] button').forEach(btn => {
   btn.addEventListener("click", () => {
@@ -1076,6 +1152,21 @@ async function supaDelete(pathWithQuery, accessToken) {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) throw new Error("Supabase delete failed: " + pathWithQuery);
+}
+
+const PHOTO_BUCKET = "activity-photos";
+async function uploadPhoto(activityId, file, authorName, accessToken) {
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+  const path = `${activityId}/${Date.now()}.${ext}`;
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${PHOTO_BUCKET}/${path}`, {
+    method: "POST",
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}`, "Content-Type": file.type || "application/octet-stream" },
+    body: file,
+  });
+  if (!res.ok) throw new Error("Photo upload failed");
+  const url = `${SUPABASE_URL}/storage/v1/object/public/${PHOTO_BUCKET}/${path}`;
+  await supaPost("activity_photos", { activityId, authorName, url }, accessToken);
+  return url;
 }
 
 // The email prefix (before @) doubles as the display name for comments/likes — nobody
