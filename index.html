@@ -833,10 +833,24 @@ async function loadDetail(activityId) {
   if (detailCache.has(activityId)) return detailCache.get(activityId);
   try {
     const res = await fetch(`details/${activityId}.json`, { cache: "no-store" });
-    const detail = res.ok ? await res.json() : null;
-    detailCache.set(activityId, detail);
-    return detail;
-  } catch { return null; }
+    if (res.ok) {
+      const detail = await res.json();
+      detailCache.set(activityId, detail);
+      return detail;
+    }
+  } catch { /* fall through to Supabase below */ }
+  // The public deploy has no details/ folder (gitignored, never deployed) — fetch-data.js
+  // writes the same laps/streams to Supabase's activity_details table too, so use that instead.
+  const session = getSession();
+  let detail = null;
+  if (session?.access_token) {
+    try {
+      const rows = await supaGet(`activity_details?activityId=eq.${encodeURIComponent(activityId)}&select=laps,streams`, session.access_token);
+      if (rows?.length) detail = { activityId, laps: rows[0].laps || [], streams: rows[0].streams || null };
+    } catch { /* no cached detail for this run — detail stays null */ }
+  }
+  detailCache.set(activityId, detail);
+  return detail;
 }
 
 function downsample(xs, ys, target = 220) {
@@ -925,7 +939,9 @@ async function openDetail(activityId) {
   const body = document.getElementById("sheetBody");
   if (!detail) {
     body.innerHTML = `<div class="empty-note">No details (laps/charts) for this run yet.<br>
-      Details are only kept for the last 20 runs — rerun <code>node fetch-data.js</code> if this is a new run.</div>`;
+      Details are only kept for the last 20 runs — rerun <code>node fetch-data.js</code> if this is a new run.</div>
+      <div id="engagement"></div>`;
+    loadEngagement(activityId);
     return;
   }
 

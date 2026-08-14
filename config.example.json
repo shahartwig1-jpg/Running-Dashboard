@@ -3,6 +3,9 @@
 
   "apiKey": "PASTE_YOUR_INTERVALS_ICU_API_KEY_HERE",
 
+  "_planCsvUrl": "Optional. Google Sheet > File > Share > Publish to web > this tab > CSV > Publish, then paste the given link here. If omitted, plan.csv is used instead.",
+  "planCsvUrl": "",
+
   "_athletes": "Start with just yourself. id 0 means 'me'. Add teammates once we know how coach access behaves.",
   "athletes": [
     { "id": "0", "name": "אני" }
