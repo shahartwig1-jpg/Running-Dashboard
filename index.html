@@ -348,6 +348,14 @@
 
   <div class="filters" role="group" aria-label="Showing" id="runnerFilters"></div>
 
+  <div style="display:flex; align-items:baseline; justify-content:space-between; gap:8px; flex-wrap:wrap; margin:14px 0 6px;">
+    <div class="sub" id="weekRangeSub"></div>
+    <div style="display:flex; gap:6px;">
+      <button id="weekPrev" class="week-nav-btn" type="button">‹ Previous week</button>
+      <button id="weekNext" class="week-nav-btn" type="button">Next week ›</button>
+    </div>
+  </div>
+
   <div class="tiles" id="tiles"></div>
 
   <div class="cards" id="cardsRow">
@@ -524,6 +532,12 @@ function hideTip() { tooltip.style.display = "none"; }
 /* ---------- range + runner state ---------- */
 let rangeDays = 7;
 let selectedRunnerId = null; // null = everyone
+// Which calendar week the weekly tiles/Km-per-runner/Km-per-weekday cards show, in
+// whole-week steps from this week (0 = this week, -1 = last week, ...). Shared across
+// the "All runners" comparison view and the single-runner view, since both read off the
+// same weekBounds()/thisWeekActs() — one nav control for "the general weekly runs" and
+// "the personal" (per-runner) view alike, so a coach can page both back in lockstep.
+let weekOffset = 0;
 
 function inRange(a) {
   return a.startTimeInSeconds * 1000 >= TODAY.getTime() - rangeDays * DAY;
@@ -534,13 +548,25 @@ function matchesRunner(a) {
 function scoped() {
   return ACTIVITIES.filter(a => inRange(a) && matchesRunner(a));
 }
-// Current calendar week (Sun -> Sat), independent of the rangeDays toggle.
+function weekBounds() {
+  const start = new Date(weekStart(TODAY).getTime() + weekOffset * 7 * DAY);
+  return { start, end: new Date(start.getTime() + 6 * DAY) };
+}
+// The viewed calendar week (Sun -> Sat), independent of the rangeDays toggle.
 function thisWeekActs() {
-  const start = weekStart(TODAY).getTime();
+  const { start } = weekBounds();
+  const startMs = start.getTime();
   return ACTIVITIES.filter(a => {
     const t = a.startTimeInSeconds * 1000;
-    return t >= start && t < start + 7 * DAY && matchesRunner(a);
+    return t >= startMs && t < startMs + 7 * DAY && matchesRunner(a);
   });
+}
+
+function renderWeekNav() {
+  const { start, end } = weekBounds();
+  document.getElementById("weekRangeSub").textContent =
+    `${fmtDateEn(start)} – ${fmtDateEn(end)}` + (weekOffset === 0 ? " (this week)" : "");
+  document.getElementById("weekNext").disabled = weekOffset >= 0; // can't browse into weeks that haven't happened yet
 }
 
 function renderRunnerFilters() {
@@ -575,8 +601,8 @@ function renderBars() {
   barCard.style.display = "";
   cardsRow.classList.remove("single");
 
-  // Always the current calendar week (Sun -> Sat), not the 7/30-day toggle — same
-  // convention as "Weekly distance" and "Km per weekday", so all three agree.
+  // The viewed calendar week (Sun -> Sat, see weekOffset), not the 7/30-day toggle —
+  // same convention as "Weekly distance" and "Km per weekday", so all three agree.
   const acts = thisWeekActs();
   const per = RUNNERS.map(r => {
     const list = acts.filter(a => a.ownerId === r.id);
@@ -585,9 +611,9 @@ function renderBars() {
     return { r, kmSum: d, n: list.length, pace: d ? t / d : 0 };
   }).sort((a, b) => b.kmSum - a.kmSum);
   const max = Math.max(...per.map(p => p.kmSum), 1);
-  const wStart = weekStart(TODAY), wEnd = new Date(wStart.getTime() + 6 * DAY);
+  const { start: wStart, end: wEnd } = weekBounds();
   document.getElementById("barSub").textContent =
-    `${fmtDateEn(wStart)} – ${fmtDateEn(wEnd)} (this week)`;
+    `${fmtDateEn(wStart)} – ${fmtDateEn(wEnd)}` + (weekOffset === 0 ? " (this week)" : "");
   const el = document.getElementById("barChart");
   el.innerHTML = per.map(p => `
     <div class="bar-row" data-id="${p.r.id}">
@@ -681,9 +707,9 @@ function renderPlan() {
 }
 
 function renderWeekday() {
-  // Always this calendar week (Sun -> Sat), independent of the 7/30-day toggle above,
-  // so every bar maps to exactly one real date.
-  const start = weekStart(TODAY);
+  // The viewed calendar week (Sun -> Sat, see weekOffset), independent of the 7/30-day
+  // toggle above, so every bar maps to exactly one real date.
+  const { start } = weekBounds();
   const dayDates = [...Array(7).keys()].map(i => new Date(start.getTime() + i * DAY));
   const acts = thisWeekActs();
 
@@ -1078,7 +1104,7 @@ async function loadEngagement(activityId) {
 function closeDetail() { document.getElementById("overlay").style.display = "none"; }
 document.getElementById("overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeDetail(); });
 
-function renderAll() { renderRunnerFilters(); renderTiles(); renderBars(); renderSleep(); renderPlan(); renderWeekday(); renderFeed(); }
+function renderAll() { renderRunnerFilters(); renderWeekNav(); renderTiles(); renderBars(); renderSleep(); renderPlan(); renderWeekday(); renderFeed(); }
 
 document.querySelectorAll('.filters[aria-label="Time range"] button').forEach(btn => {
   btn.addEventListener("click", () => {
@@ -1099,6 +1125,16 @@ document.getElementById("runnerFilters").addEventListener("click", e => {
 
 document.getElementById("planPrev").addEventListener("click", () => { planWeekOffset--; renderPlan(); });
 document.getElementById("planNext").addEventListener("click", () => { if (planWeekOffset < 0) { planWeekOffset++; renderPlan(); } });
+
+document.getElementById("weekPrev").addEventListener("click", () => {
+  weekOffset--;
+  renderWeekNav(); renderTiles(); renderBars(); renderWeekday();
+});
+document.getElementById("weekNext").addEventListener("click", () => {
+  if (weekOffset >= 0) return; // can't browse into weeks that haven't happened yet
+  weekOffset++;
+  renderWeekNav(); renderTiles(); renderBars(); renderWeekday();
+});
 
 /* Real data, if fetch-data.js has produced any; otherwise the demo above stands. */
 async function loadReal() {
