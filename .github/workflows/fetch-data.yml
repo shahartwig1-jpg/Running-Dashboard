@@ -28,5 +28,4 @@ jobs:
           ATHLETES_JSON: ${{ secrets.ATHLETES_JSON }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          PLAN_CSV_URL: ${{ secrets.PLAN_CSV_URL }}
         run: node fetch-data.js

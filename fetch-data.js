@@ -19,82 +19,6 @@ const OUT_PATH = path.join(__dirname, "data.json");
 const DAYS_BACK = 70; // ~10 weeks, enough for the 8-week trend plus slack
 const DETAIL_DIR = path.join(__dirname, "details"); // per-activity laps + streams, one file each
 const STREAM_TYPES = "time,heartrate,distance,altitude,velocity_smooth";
-const PLAN_PATH = path.join(__dirname, "plan.csv"); // local fallback, used only if no PLAN_CSV_URL is configured
-const PLAN_WEEKDAY_COLUMNS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"]; // index = Date#getDay()
-
-// Minimal RFC4180-ish CSV parser (no dependency): a field only enters quoted mode if the
-// `"` is the very first character of that field, so a literal quote elsewhere in an
-// unquoted field (e.g. the גרשיים in "ק"מ") is just a character, not a parse error.
-function parseCsv(text) {
-  const rows = [];
-  let row = [], field = "", inQuotes = false, fieldStart = true;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i], next = text[i + 1];
-    if (inQuotes) {
-      if (c === '"' && next === '"') { field += '"'; i++; }
-      else if (c === '"') inQuotes = false;
-      else field += c;
-      continue;
-    }
-    if (fieldStart && c === '"') { inQuotes = true; fieldStart = false; continue; }
-    if (c === ",") { row.push(field); field = ""; fieldStart = true; continue; }
-    if (c === "\r") continue;
-    if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; fieldStart = true; continue; }
-    field += c; fieldStart = false;
-  }
-  if (field !== "" || row.length) { row.push(field); rows.push(row); }
-  return rows.filter(r => !(r.length === 1 && r[0] === ""));
-}
-
-// Weekly plan, keyed by athlete id -> array of 7 day strings (Sun -> Sat), same
-// indexing the dashboard already uses for the "ק״מ לפי יום בשבוע" chart.
-// Source is the published Google Sheet CSV (planCsvUrl / PLAN_CSV_URL) if configured,
-// so the group can edit next week's plan without a code change; plan.csv is only the
-// local fallback for whoever has no URL configured yet.
-async function loadPlan(athletes, csvUrl) {
-  let text;
-  if (csvUrl) {
-    try {
-      const res = await fetch(csvUrl);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      text = await res.text();
-    } catch (e) {
-      console.error(`Failed to fetch plan from PLAN_CSV_URL (${e.message})` +
-        (fs.existsSync(PLAN_PATH) ? " — falling back to local plan.csv." : " — no local plan.csv to fall back to."));
-    }
-  }
-  if (text === undefined) {
-    if (!fs.existsSync(PLAN_PATH)) return null;
-    text = fs.readFileSync(PLAN_PATH, "utf8");
-  }
-  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1); // strip UTF-8 BOM Google Sheets sometimes adds
-  const rows = parseCsv(text);
-  if (!rows.length) return null;
-  // The published Sheet CSV can have leading blank rows/columns depending on exactly
-  // where the paste landed, so find the header row by content instead of assuming it's
-  // rows[0] — same reason the name column below is found relative to the day columns
-  // instead of assumed to be column 0.
-  const headerIdx = rows.findIndex(row => PLAN_WEEKDAY_COLUMNS.every(label => row.includes(label)));
-  if (headerIdx === -1) {
-    console.error(`plan: header must include all of ${PLAN_WEEKDAY_COLUMNS.join(", ")} — plan not loaded.`);
-    return null;
-  }
-  const header = rows[headerIdx];
-  const dayCols = PLAN_WEEKDAY_COLUMNS.map(label => header.indexOf(label));
-  const nameCol = Math.max(Math.min(...dayCols) - 1, 0); // the name column sits immediately left of the first day column
-  const plan = {};
-  for (const row of rows.slice(headerIdx + 1)) {
-    const label = (row[nameCol] || "").trim();
-    if (!label) continue;
-    const athlete = athletes.find(a => (a.planName || a.name || "").trim() === label);
-    if (!athlete) {
-      console.error(`plan: no runner matches "${label}" (checked planName/name in config.json) — row skipped.`);
-      continue;
-    }
-    plan[athlete.id] = dayCols.map(i => (row[i] || "").trim());
-  }
-  return plan;
-}
 
 function loadConfig() {
   // In CI (GitHub Actions) there is no config.json/key.txt on disk — the roster and
@@ -134,9 +58,6 @@ function loadConfig() {
     console.error("then save. Get it at intervals.icu > Settings > Developer Settings > API Key.");
     process.exit(1);
   }
-  // Published Google Sheet CSV URL for the live/editable weekly plan (env wins, same
-  // pattern as apiKey above — CI supplies it as a secret, config.json for local runs).
-  if (process.env.PLAN_CSV_URL) cfg.planCsvUrl = process.env.PLAN_CSV_URL;
   return cfg;
 }
 
@@ -158,12 +79,6 @@ async function call(apiKey, endpoint) {
 
 const isoDaysAgo = n => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 const today = () => new Date().toISOString().slice(0, 10);
-const thisWeekStart = () => { // this week's Sunday, as YYYY-MM-DD — same convention index.html uses
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - d.getDay());
-  return d.toISOString().slice(0, 10);
-};
 
 /* Intervals.icu largely mirrors the Strava activity schema, but field presence
    varies by source device. Each getter falls through the plausible names so a
@@ -361,16 +276,9 @@ async function fetchAll(cfg) {
   }
 
   activities.sort((a, b) => b.startTimeInSeconds - a.startTimeInSeconds);
-  const plan = await loadPlan(athletes, cfg.planCsvUrl);
-  if (plan) {
-    const weekStartStr = thisWeekStart();
-    const rows = [];
-    for (const [ownerId, days] of Object.entries(plan)) {
-      days.forEach((text, weekday) => rows.push({ ownerId: String(ownerId), weekStart: weekStartStr, weekday, text, fetchedAt }));
-    }
-    await supa.upsertPlanDays(rows);
-  }
-  // Full plan history (every week ever seen, not just this one) so the dashboard can page back.
+  // The weekly plan is now edited directly in the dashboard (writes straight to
+  // plan_history from the browser), so this script only reads it back for data.json —
+  // every week ever seen, not just the current one, so the dashboard can page back.
   const planHistoryRows = await supa.getPlanHistory();
   const planHistory = {};
   for (const row of planHistoryRows) {
@@ -385,7 +293,7 @@ async function fetchAll(cfg) {
     runners, activities, sleep, planHistory,
   }, null, 2));
   console.log(`\nWrote ${activities.length} runs from ${runners.length} runners -> data.json` +
-    ` (+ ${sleep.length} night(s) of sleep data${plan ? `, plan for ${Object.keys(plan).length} runner(s)` : ", no plan loaded"}, ${planHistoryRows.length} plan-history row(s) total)`);
+    ` (+ ${sleep.length} night(s) of sleep data, ${planHistoryRows.length} plan-history row(s) total)`);
 
   await fetchDetails(activities, ownerId => keyByAthlete[ownerId]);
   console.log("Refresh the dashboard to see them.");
@@ -406,4 +314,4 @@ if (require.main === module) {
   })();
 }
 
-module.exports = { normalize, normalizeLap, normalizeStreams, parseCsv };
+module.exports = { normalize, normalizeLap, normalizeStreams };

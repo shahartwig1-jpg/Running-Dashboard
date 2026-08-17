@@ -178,6 +178,11 @@
   .plan-text { flex: 1; font-size: 13px; color: var(--text-secondary); }
   .plan-row.today .plan-text { color: var(--text-primary); font-weight: 600; }
   .plan-rest .plan-text { color: var(--text-muted); }
+  .plan-edit-input {
+    flex: 1; font: inherit; font-size: 13px; color: var(--text-primary);
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px;
+  }
+  .plan-edit-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 
   /* Activity feed (Strava/Garmin-style, replaces the old plain table) */
   .feed-item { display: flex; gap: 12px; padding: 14px 4px; border-bottom: 1px solid var(--grid); cursor: pointer; }
@@ -381,6 +386,7 @@
     <div style="display:flex; align-items:baseline; justify-content:space-between; gap:8px; flex-wrap:wrap;">
       <h2>Weekly training plan</h2>
       <div style="display:flex; gap:6px;">
+        <button id="planEditBtn" class="week-nav-btn" type="button" style="display:none;">Edit</button>
         <button id="planPrev" class="week-nav-btn" type="button">‹ Previous week</button>
         <button id="planNext" class="week-nav-btn" type="button">Next week ›</button>
       </div>
@@ -443,6 +449,7 @@ let ACTIVITIES = [];
 let SLEEP = [];
 let PLAN_HISTORY = {}; // ownerId -> { weekStartISO -> array of 7 day strings (Sun -> Sat) }
 let planWeekOffset = 0; // 0 = this week, -1 = last week, etc. — reset to 0 whenever the runner selection changes
+let planEditing = false; // reset to false whenever the runner/week changes, see below
 
 function computeWeeks() {
   WEEKS = []; // oldest -> current
@@ -671,15 +678,19 @@ function renderPlan() {
   card.style.display = "";
   const sub = document.getElementById("planSub"), el = document.getElementById("planChart");
   const prevBtn = document.getElementById("planPrev"), nextBtn = document.getElementById("planNext");
+  const editBtn = document.getElementById("planEditBtn");
 
   if (selectedRunnerId === null) {
     sub.textContent = "Select a runner above to see their plan";
     el.innerHTML = `<div class="empty-note">The plan is personal to each runner — pick a name from the list above</div>`;
     prevBtn.disabled = true; nextBtn.disabled = true;
+    editBtn.style.display = "none";
     return;
   }
   prevBtn.disabled = false;
   nextBtn.disabled = planWeekOffset >= 0; // can't browse into weeks that haven't happened yet
+  editBtn.style.display = isCoach() ? "" : "none";
+  editBtn.textContent = planEditing ? "Cancel" : "Edit";
 
   const r = runnerById(selectedRunnerId);
   const start = new Date(weekStart(TODAY).getTime() + planWeekOffset * 7 * DAY);
@@ -689,11 +700,42 @@ function renderPlan() {
   const rangeLabel = `${fmtDateEn(start)} – ${fmtDateEn(weekEnd)}`;
   sub.textContent = `${r.name} · ${rangeLabel}` + (planWeekOffset === 0 ? " (this week)" : "");
 
-  if (!days) {
-    el.innerHTML = `<div class="empty-note">No plan saved for this week</div>`;
+  const todayIdx = planWeekOffset === 0 ? TODAY.getDay() : -1;
+
+  if (planEditing) {
+    const source = days || new Array(7).fill("");
+    el.innerHTML = source.map((text, i) => {
+      const d = new Date(start.getTime() + i * DAY);
+      const esc = (text || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+      return `<div class="plan-row${i === todayIdx ? " today" : ""}">
+        <div class="plan-day">${WEEKDAY_EN[i]}</div>
+        <div class="plan-date">${fmtDateEn(d)}</div>
+        <input type="text" class="plan-edit-input" data-day="${i}" value="${esc}" placeholder="Rest">
+      </div>`;
+    }).join("") + `
+      <div class="plan-edit-actions">
+        <button id="planSaveBtn" class="week-nav-btn" type="button">Save</button>
+        <span id="planSaveStatus" style="font-size:12px; color:var(--text-muted);"></span>
+      </div>`;
+    document.getElementById("planSaveBtn").addEventListener("click", async () => {
+      const status = document.getElementById("planSaveStatus");
+      const texts = [...el.querySelectorAll(".plan-edit-input")].map(inp => inp.value.trim());
+      status.textContent = "Saving…";
+      try {
+        await savePlanWeek(selectedRunnerId, weekStartStr, texts);
+        planEditing = false;
+        renderPlan();
+      } catch {
+        status.textContent = "Save failed — try again";
+      }
+    });
     return;
   }
-  const todayIdx = planWeekOffset === 0 ? TODAY.getDay() : -1;
+
+  if (!days) {
+    el.innerHTML = `<div class="empty-note">No plan saved for this week${isCoach() ? " — click Edit to add one" : ""}</div>`;
+    return;
+  }
   el.innerHTML = days.map((text, i) => {
     const d = new Date(start.getTime() + i * DAY);
     const isToday = i === todayIdx;
@@ -704,6 +746,19 @@ function renderPlan() {
       <div class="plan-text">${text || "—"}</div>
     </div>`;
   }).join("");
+}
+
+// Upserts a full 7-day week for one runner into Supabase's plan_history table, using the
+// logged-in user's own session (not a service_role key) — the plan_edit_policy.sql RLS
+// policy is what actually enforces "only the coach can write", this is just the client
+// call that policy allows through.
+async function savePlanWeek(ownerId, weekStartStr, texts) {
+  const session = getSession();
+  const fetchedAt = new Date().toISOString();
+  const rows = texts.map((text, weekday) => ({ ownerId, weekStart: weekStartStr, weekday, text, fetchedAt }));
+  await supaUpsert("plan_history", rows, "ownerId,weekStart,weekday", session.access_token);
+  PLAN_HISTORY[ownerId] ??= {};
+  PLAN_HISTORY[ownerId][weekStartStr] = texts;
 }
 
 function renderWeekday() {
@@ -1120,11 +1175,13 @@ document.getElementById("runnerFilters").addEventListener("click", e => {
   if (!btn) return;
   selectedRunnerId = btn.dataset.runner || null;
   planWeekOffset = 0;
+  planEditing = false;
   renderAll();
 });
 
-document.getElementById("planPrev").addEventListener("click", () => { planWeekOffset--; renderPlan(); });
-document.getElementById("planNext").addEventListener("click", () => { if (planWeekOffset < 0) { planWeekOffset++; renderPlan(); } });
+document.getElementById("planEditBtn").addEventListener("click", () => { planEditing = !planEditing; renderPlan(); });
+document.getElementById("planPrev").addEventListener("click", () => { planWeekOffset--; planEditing = false; renderPlan(); });
+document.getElementById("planNext").addEventListener("click", () => { if (planWeekOffset < 0) { planWeekOffset++; planEditing = false; renderPlan(); } });
 
 document.getElementById("weekPrev").addEventListener("click", () => {
   weekOffset--;
@@ -1165,10 +1222,16 @@ async function loadReal() {
 const SUPABASE_URL = "https://vyvfrnkxvsjinzflrnig.supabase.co";
 const SUPABASE_KEY = "sb_publishable_XfY3Rn_Nv7mCeVtQ5VN38A_eegSLLV7"; // safe to expose — protected by RLS, not secrecy
 const SESSION_KEY = "runDashboardSession";
+// Just a UI-level convenience to show/hide the plan editor — the real enforcement is the
+// Supabase RLS policy on plan_history (supabase/plan_edit_policy.sql), which checks this
+// same email server-side. Someone bypassing this client-side check would still get
+// rejected by Postgres on save.
+const COACH_EMAIL = "shahartwig1@gmail.com";
 
 function saveSession(s) { sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
 function getSession() { try { return JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch { return null; } }
 function clearSession() { sessionStorage.removeItem(SESSION_KEY); }
+function isCoach() { return getSession()?.user?.email === COACH_EMAIL; }
 
 async function supabaseSignIn(email, password) {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
@@ -1196,6 +1259,18 @@ async function supaPost(table, body, accessToken) {
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error("Supabase insert failed: " + table);
+}
+
+async function supaUpsert(table, rows, onConflict, accessToken) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify(rows),
+  });
+  if (!res.ok) throw new Error("Supabase upsert failed: " + table);
 }
 
 async function supaDelete(pathWithQuery, accessToken) {
