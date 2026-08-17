@@ -70,15 +70,21 @@ async function loadPlan(athletes, csvUrl) {
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1); // strip UTF-8 BOM Google Sheets sometimes adds
   const rows = parseCsv(text);
   if (!rows.length) return null;
-  const header = rows[0];
-  const dayCols = PLAN_WEEKDAY_COLUMNS.map(label => header.indexOf(label));
-  if (dayCols.some(i => i === -1)) {
+  // The published Sheet CSV can have leading blank rows/columns depending on exactly
+  // where the paste landed, so find the header row by content instead of assuming it's
+  // rows[0] — same reason the name column below is found relative to the day columns
+  // instead of assumed to be column 0.
+  const headerIdx = rows.findIndex(row => PLAN_WEEKDAY_COLUMNS.every(label => row.includes(label)));
+  if (headerIdx === -1) {
     console.error(`plan: header must include all of ${PLAN_WEEKDAY_COLUMNS.join(", ")} — plan not loaded.`);
     return null;
   }
+  const header = rows[headerIdx];
+  const dayCols = PLAN_WEEKDAY_COLUMNS.map(label => header.indexOf(label));
+  const nameCol = Math.max(Math.min(...dayCols) - 1, 0); // the name column sits immediately left of the first day column
   const plan = {};
-  for (const row of rows.slice(1)) {
-    const label = (row[0] || "").trim();
+  for (const row of rows.slice(headerIdx + 1)) {
+    const label = (row[nameCol] || "").trim();
     if (!label) continue;
     const athlete = athletes.find(a => (a.planName || a.name || "").trim() === label);
     if (!athlete) {
