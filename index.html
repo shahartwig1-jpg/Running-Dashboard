@@ -681,10 +681,24 @@ function renderPlan() {
   const editBtn = document.getElementById("planEditBtn");
 
   if (selectedRunnerId === null) {
-    sub.textContent = "Select a runner above to see their plan";
-    el.innerHTML = `<div class="empty-note">The plan is personal to each runner — pick a name from the list above</div>`;
-    prevBtn.disabled = true; nextBtn.disabled = true;
-    editBtn.style.display = "none";
+    editBtn.style.display = "none"; // the per-runner Edit/Cancel toggle doesn't apply here
+    if (!isCoach()) {
+      sub.textContent = "Select a runner above to see their plan";
+      el.innerHTML = `<div class="empty-note">The plan is personal to each runner — pick a name from the list above</div>`;
+      prevBtn.disabled = true; nextBtn.disabled = true;
+      return;
+    }
+    // Coach + "All" selected: instead of one runner's grid, offer a bulk tool — the same
+    // workout text applied to several runners' plans for one day at once (a shared group
+    // session, e.g. "we're all doing this tomorrow"), rather than repeating the single-
+    // runner editor once per person.
+    prevBtn.disabled = false;
+    nextBtn.disabled = planWeekOffset >= 0;
+    const start = new Date(weekStart(TODAY).getTime() + planWeekOffset * 7 * DAY);
+    const weekStartStr = start.toISOString().slice(0, 10);
+    const weekEnd = new Date(start.getTime() + 6 * DAY);
+    sub.textContent = `Shared workout · ${fmtDateEn(start)} – ${fmtDateEn(weekEnd)}` + (planWeekOffset === 0 ? " (this week)" : "");
+    renderSharedWorkoutTool(el, weekStartStr, start);
     return;
   }
   prevBtn.disabled = false;
@@ -759,6 +773,60 @@ async function savePlanWeek(ownerId, weekStartStr, texts) {
   await supaUpsert("plan_history", rows, "ownerId,weekStart,weekday", session.access_token);
   PLAN_HISTORY[ownerId] ??= {};
   PLAN_HISTORY[ownerId][weekStartStr] = texts;
+}
+
+// One workout, applied to several runners' plans at once — e.g. a shared group session
+// everyone's doing the same day, instead of retyping it into each runner's week one by one.
+function renderSharedWorkoutTool(el, weekStartStr, start) {
+  const dayDates = [...Array(7).keys()].map(i => new Date(start.getTime() + i * DAY));
+  const tomorrow = new Date(TODAY.getTime() + DAY).toDateString();
+  let defaultIdx = dayDates.findIndex(d => d.toDateString() === tomorrow);
+  if (defaultIdx === -1) defaultIdx = 0; // "tomorrow" isn't in the currently viewed week — just default to its first day
+
+  el.innerHTML = `
+    <div class="empty-note" style="margin-bottom:10px;">Type one workout, apply it to several runners' plans at once</div>
+    <select id="sharedWorkoutDay" class="plan-edit-input">
+      ${dayDates.map((d, i) => `<option value="${i}" ${i === defaultIdx ? "selected" : ""}>${WEEKDAY_EN[i]} · ${fmtDateEn(d)}</option>`).join("")}
+    </select>
+    <textarea id="sharedWorkoutText" class="plan-edit-input" rows="4"
+      style="width:100%; margin-top:10px; box-sizing:border-box; resize:vertical; font-family:inherit;"
+      placeholder="e.g. Hill + tempo session, 15-16km..."></textarea>
+    <div style="margin-top:10px; display:flex; gap:14px; flex-wrap:wrap;">
+      ${RUNNERS.map(r => `<label style="display:flex; align-items:center; gap:5px; font-size:13px; cursor:pointer;">
+        <input type="checkbox" class="shared-runner-check" value="${r.id}" checked>${r.name}</label>`).join("")}
+    </div>
+    <div class="plan-edit-actions">
+      <button id="sharedWorkoutApply" class="week-nav-btn" type="button">Apply</button>
+      <span id="sharedWorkoutStatus" style="font-size:12px; color:var(--text-muted);"></span>
+    </div>`;
+
+  document.getElementById("sharedWorkoutApply").addEventListener("click", async () => {
+    const status = document.getElementById("sharedWorkoutStatus");
+    const weekday = +document.getElementById("sharedWorkoutDay").value;
+    const text = document.getElementById("sharedWorkoutText").value.trim();
+    const ownerIds = [...el.querySelectorAll(".shared-runner-check:checked")].map(c => c.value);
+    if (!text) { status.textContent = "Type a workout first"; return; }
+    if (!ownerIds.length) { status.textContent = "Pick at least one runner"; return; }
+    status.textContent = "Saving…";
+    try {
+      await saveSharedWorkout(weekStartStr, weekday, text, ownerIds);
+      status.textContent = `Saved for ${ownerIds.length} runner${ownerIds.length > 1 ? "s" : ""}`;
+    } catch {
+      status.textContent = "Save failed — try again";
+    }
+  });
+}
+
+async function saveSharedWorkout(weekStartStr, weekday, text, ownerIds) {
+  const session = getSession();
+  const fetchedAt = new Date().toISOString();
+  const rows = ownerIds.map(ownerId => ({ ownerId, weekStart: weekStartStr, weekday, text, fetchedAt }));
+  await supaUpsert("plan_history", rows, "ownerId,weekStart,weekday", session.access_token);
+  for (const ownerId of ownerIds) {
+    PLAN_HISTORY[ownerId] ??= {};
+    PLAN_HISTORY[ownerId][weekStartStr] ??= new Array(7).fill(null);
+    PLAN_HISTORY[ownerId][weekStartStr][weekday] = text;
+  }
 }
 
 function renderWeekday() {
