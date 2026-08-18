@@ -93,7 +93,10 @@
      crouching in front are lower in the frame than the standing row, so this needs to
      be tall enough to reach them; tune the 54% if the framing needs to shift. */
   .hero { position: relative; height: 360px; border-radius: 14px; overflow: hidden; margin-bottom: 20px;
-    background: url("team.jpg") center 54% / cover no-repeat; }
+    /* team.jpg itself stays gitignored (real faces, repo is public) — this points at a
+       public-read Supabase Storage copy instead, so the image reaches the deployed site
+       without the file ever being committed. */
+    background: url("https://vyvfrnkxvsjinzflrnig.supabase.co/storage/v1/object/public/site-assets/team.jpg") center 54% / cover no-repeat; }
   .hero::after {
     content: "";
     position: absolute; inset: 0; z-index: 2;
