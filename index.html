@@ -196,7 +196,6 @@
   .feed-name { font-weight: 600; font-size: 13px; }
   .feed-time { font-size: 11px; color: var(--text-muted); }
   .feed-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
-  .feed-together { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
   .feed-stats { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
   .feed-stats b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
   .feed-photo { width: 100%; max-height: 220px; object-fit: cover; border-radius: 10px; margin-bottom: 8px; display: block; }
@@ -895,30 +894,6 @@ function renderWeekday() {
   });
 }
 
-// "Ran together": significant time overlap between two different runners' activities.
-// This app doesn't store GPS tracks, so it's not route-matching like Strava's version —
-// just start/end time overlap. Requires at least half of the SHORTER run's duration to
-// fall inside the other's time window, so two people who merely started near each other
-// but ran very different lengths don't get flagged. Compares against the full ACTIVITIES
-// list (not the current filter/range) so it's accurate regardless of what's on screen.
-function groupPartners(a) {
-  const start = a.startTimeInSeconds, end = start + a.durationInSeconds;
-  const seen = new Set();
-  const partners = [];
-  for (const o of ACTIVITIES) {
-    if (o.ownerId === a.ownerId || seen.has(o.ownerId)) continue;
-    const oStart = o.startTimeInSeconds, oEnd = oStart + o.durationInSeconds;
-    const overlap = Math.min(end, oEnd) - Math.max(start, oStart);
-    if (overlap <= 0) continue;
-    const shorter = Math.min(a.durationInSeconds, o.durationInSeconds);
-    if (shorter > 0 && overlap / shorter >= 0.5) {
-      seen.add(o.ownerId);
-      partners.push(runnerById(o.ownerId));
-    }
-  }
-  return partners;
-}
-
 function renderFeed() {
   const all = scoped();
   const acts = all.slice(0, 14);
@@ -935,7 +910,6 @@ function renderFeed() {
   el.innerHTML = acts.map(a => {
     const r = runnerById(a.ownerId);
     const pace = a.durationInSeconds / km(a);
-    const partners = groupPartners(a);
     return `<div class="feed-item" data-activity-id="${a.activityId}">
       <div class="avatar" style="background:${colorOf(r)}">${(r.name[0] || "?").toUpperCase()}</div>
       <div class="feed-main">
@@ -944,7 +918,6 @@ function renderFeed() {
           <span class="feed-time">${fmtDate(a.startTimeInSeconds)}</span>
         </div>
         <div class="feed-title">${a.activityName || "Run"}</div>
-        ${partners.length ? `<div class="feed-together">🤝 with ${partners.map(p => p.name).join(", ")}</div>` : ""}
         <div class="feed-stats">
           <span><b>${fmtKm(km(a))}</b> km</span>
           <span><b>${fmtDur(a.durationInSeconds)}</b></span>
