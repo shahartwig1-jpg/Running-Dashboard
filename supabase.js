@@ -71,7 +71,26 @@ async function getPlanHistory() {
   });
 }
 
+// activityId list already stored for one athlete within a time window — used to spot
+// runs that vanished from Intervals.icu (deleted, or reclassified as a non-run) since the
+// last fetch, so fetch-data.js can remove them instead of leaving stale rows forever.
+async function getActivityIds(ownerId, oldestEpoch, newestEpoch) {
+  const rows = await request("GET", "activities", {
+    query: `?ownerId=eq.${encodeURIComponent(ownerId)}&startTimeInSeconds=gte.${oldestEpoch}` +
+      `&startTimeInSeconds=lt.${newestEpoch}&select=activityId`,
+  });
+  return rows.map(r => r.activityId);
+}
+
+async function deleteActivities(activityIds) {
+  if (!activityIds.length) return;
+  const idList = activityIds.map(id => encodeURIComponent(id)).join(",");
+  await request("DELETE", "activities", { query: `?activityId=in.(${idList})` });
+  await request("DELETE", "activity_details", { query: `?activityId=in.(${idList})` });
+}
+
 module.exports = {
   upsertRunners, upsertActivities, upsertSleep, upsertPlanDays,
   upsertActivityDetail, getActivityDetail, getPlanHistory,
+  getActivityIds, deleteActivities,
 };

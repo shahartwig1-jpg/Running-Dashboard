@@ -227,6 +227,11 @@ async function discover(cfg) {
 async function fetchAll(cfg) {
   const athletes = cfg.athletes && cfg.athletes.length ? cfg.athletes : [{ id: "0", name: "אני" }];
   const oldest = isoDaysAgo(DAYS_BACK), newest = today();
+  // Same window as the Intervals.icu query above, as epoch seconds — used to check for
+  // runs that used to be in Supabase but no longer come back from Intervals.icu (deleted,
+  // or no longer qualifies as a run), within that window, and remove them.
+  const oldestEpoch = Math.floor(new Date(oldest).getTime() / 1000);
+  const newestEpoch = Math.floor(new Date(newest).getTime() / 1000) + 86400; // include all of "today"
   const runners = [], activities = [], sleep = [];
   const keyByAthlete = {}; // needed again in fetchDetails, since laps/streams are per-activity calls
   const fetchedAt = new Date().toISOString();
@@ -243,6 +248,30 @@ async function fetchAll(cfg) {
       const device = mine.find(a => a.deviceName)?.deviceName || "";
       runners.push({ id: ath.id, name: ath.name || ath.id, device, slot: (i % 8) + 1 });
       console.log(`${ath.name || ath.id}: ${mine.length} runs`);
+
+      try {
+        // "Missing from the list endpoint" is NOT reliable proof of deletion — confirmed
+        // by testing: two of Saar's real, still-existing runs were absent from this same
+        // list call for no discoverable reason (no private/hidden flag, nothing), while
+        // still fetchable directly by id. So a list-miss is only a CANDIDATE; only an
+        // actual 404 on GET /activity/{id} counts as confirmed-deleted. Any other outcome
+        // (still 200, or the check itself fails) means "keep it" — never delete on
+        // ambiguous evidence.
+        const existingIds = await supa.getActivityIds(ath.id, oldestEpoch, newestEpoch);
+        const freshIds = new Set(mine.map(a => String(a.activityId)));
+        const candidateIds = existingIds.filter(id => !freshIds.has(String(id)));
+        const confirmedGoneIds = [];
+        for (const id of candidateIds) {
+          const stillThere = await call(key, `/activity/${id}`).then(() => true).catch(e => e.status !== 404);
+          if (!stillThere) confirmedGoneIds.push(id);
+        }
+        if (confirmedGoneIds.length) {
+          await supa.deleteActivities(confirmedGoneIds);
+          console.log(`${ath.name || ath.id}: removed ${confirmedGoneIds.length} run(s) confirmed deleted on Intervals.icu`);
+        }
+      } catch (e) {
+        console.error(`${ath.name || ath.id}: deleted-run check failed (${e.message})`);
+      }
 
       try {
         const nights = await fetchWellness(key, ath.id, oldest, newest);
