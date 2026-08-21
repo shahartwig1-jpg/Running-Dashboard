@@ -1,3 +1,31 @@
+# 🏃 Running Group Dashboard
+
+A live training dashboard for a real running group — pulls everyone's runs into one place regardless of which watch/app they use, lets a coach manage weekly training plans in-app, and layers on a Strava-style social feed. Built solo, actively used daily by a real group, not a demo.
+
+**Live app:** https://running-dashboard-eqyc.onrender.com
+**Repo:** https://github.com/shahartwig1-jpg/Running-Dashboard
+
+## What it does
+
+- Aggregates every runner's activities from [Intervals.icu](https://intervals.icu) (which normalizes data from Garmin, Coros, Suunto, Strava, etc.), regardless of watch brand
+- Weekly/comparison charts (distance, pace, per-weekday breakdown) with week-by-week navigation
+- **In-app weekly training plan editor**, coach-only, enforced at the database level — not just hidden in the UI
+- Social layer: kudos, comments, and photo uploads on individual runs
+- Email notifications when someone kudos/comments your run
+- Public deploy with real authentication (Supabase Auth), gated behind login
+
+## Stack
+
+Vanilla JS frontend (no framework), Node.js backend script, PostgreSQL (Supabase) with Row-Level Security, Supabase Auth + Storage + Edge Functions, GitHub Actions for scheduled jobs, deployed on Render. **Zero npm dependencies anywhere** — every network call, front and back, goes through the native `fetch()` API.
+
+## A few engineering decisions worth highlighting
+
+- **Security enforced server-side, not just in the UI.** The plan editor's "only the coach can edit" rule is a Postgres RLS policy checking the logged-in user's JWT claims — a request that bypasses the UI entirely still gets rejected by the database.
+- **Defensive syncing against an unreliable third-party API.** Intervals.icu's activity-list endpoint can silently omit real, still-existing activities (confirmed by testing, not documented anywhere). Rather than trust "missing from the list" as proof of deletion, the sync only hard-deletes on a confirmed 404 from a direct lookup — anything else gets soft-hidden instead, so nothing is ever destroyed based on ambiguous evidence, and it self-heals if the data reappears.
+- **Automated data pipeline.** A GitHub Actions cron job runs every 6 hours, pulling from the fitness API and reconciling it against the database — no manual step required to keep data fresh.
+
+---
+
 # דשבורד קבוצת ריצה
 
 דשבורד שמציג את הריצות של כל חברי הקבוצה במקום אחד, בלי קשר לסוג השעון.
