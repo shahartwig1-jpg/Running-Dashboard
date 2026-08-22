@@ -301,24 +301,24 @@
   footer code { font-family: Consolas, monospace; font-size: 11px; }
 
   /* Login gate — only used on the public deploy; localhost keeps reading data.json directly */
-  #loginScreen {
+  #loginScreen, #resetScreen {
     position: fixed; inset: 0; z-index: 30; display: none;
     align-items: center; justify-content: center;
     background: var(--page);
   }
-  #loginScreen .card { width: min(340px, 90vw); text-align: center; }
-  #loginScreen h2 { font-size: 16px; margin-bottom: 4px; }
-  #loginScreen .sub { margin-bottom: 16px; }
-  #loginScreen input {
+  #loginScreen .card, #resetScreen .card { width: min(340px, 90vw); text-align: center; }
+  #loginScreen h2, #resetScreen h2 { font-size: 16px; margin-bottom: 4px; }
+  #loginScreen .sub, #resetScreen .sub { margin-bottom: 16px; }
+  #loginScreen input, #resetScreen input {
     width: 100%; font: inherit; font-size: 14px; padding: 9px 12px; margin-bottom: 8px;
     border: 1px solid var(--border); border-radius: 8px; background: var(--page); color: var(--text-primary);
   }
-  #loginScreen button {
+  #loginScreen button, #resetScreen button {
     width: 100%; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
     padding: 10px 12px; border: none; border-radius: 8px; background: var(--series-1); color: #fff; margin-top: 4px;
   }
-  #loginScreen button:disabled { opacity: 0.6; cursor: default; }
-  #loginScreen .error { color: var(--series-6); font-size: 12px; margin-top: 8px; min-height: 16px; }
+  #loginScreen button:disabled, #resetScreen button:disabled { opacity: 0.6; cursor: default; }
+  #loginScreen .error, #resetScreen .error { color: var(--series-6); font-size: 12px; margin-top: 8px; min-height: 16px; }
   #signOutBtn {
     font: inherit; font-size: 12px; cursor: pointer; color: var(--text-muted);
     background: none; border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px;
@@ -347,6 +347,17 @@
     <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password">
     <button id="loginBtn" type="button">Log in</button>
     <div class="error" id="loginError"></div>
+  </div>
+</div>
+
+<div id="resetScreen" style="display:none">
+  <div class="card">
+    <h2>🏃 Set a new password</h2>
+    <div class="sub" style="font-size:12px;color:var(--text-muted)">You followed a password reset link — choose a new password below.</div>
+    <input type="password" id="resetPassword" placeholder="New password" autocomplete="new-password">
+    <input type="password" id="resetPasswordConfirm" placeholder="Confirm new password" autocomplete="new-password">
+    <button id="resetBtn" type="button">Set password</button>
+    <div class="error" id="resetError"></div>
   </div>
 </div>
 
@@ -1329,6 +1340,20 @@ async function supabaseSignIn(email, password) {
   return body; // { access_token, ... }
 }
 
+// Called with the short-lived access_token Supabase puts in the URL fragment of a
+// password-recovery email link (#access_token=...&type=recovery) — sets a new password
+// for whichever account that token belongs to.
+async function supaSetPassword(recoveryAccessToken, newPassword) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    method: "PUT",
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${recoveryAccessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ password: newPassword }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error_description || body.msg || "couldn't set password");
+  return body;
+}
+
 async function supaGet(pathWithQuery, accessToken) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${pathWithQuery}`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
@@ -1434,6 +1459,38 @@ function showLogin(errorMsg) {
 }
 function hideLogin() { document.getElementById("loginScreen").style.display = "none"; }
 
+// A password-recovery email link lands here as #access_token=...&type=recovery (Supabase's
+// implicit-flow convention) — if present, show the "set new password" screen instead of the
+// normal login form, and skip attemptLoginFlow entirely so it doesn't also run.
+function checkForPasswordRecovery() {
+  const params = new URLSearchParams(location.hash.slice(1));
+  if (params.get("type") !== "recovery" || !params.get("access_token")) return false;
+  const token = params.get("access_token");
+  history.replaceState(null, "", location.pathname + location.search); // scrub the token from the URL/address bar
+  document.getElementById("resetScreen").style.display = "flex";
+  document.getElementById("resetBtn").addEventListener("click", async () => {
+    const pw = document.getElementById("resetPassword").value;
+    const pw2 = document.getElementById("resetPasswordConfirm").value;
+    const err = document.getElementById("resetError");
+    const btn = document.getElementById("resetBtn");
+    err.textContent = "";
+    if (pw.length < 6) { err.textContent = "Password must be at least 6 characters"; return; }
+    if (pw !== pw2) { err.textContent = "Passwords don't match"; return; }
+    btn.disabled = true;
+    try {
+      await supaSetPassword(token, pw);
+      document.getElementById("resetScreen").style.display = "none";
+      showLogin("Password updated — log in with your new password.");
+      document.getElementById("loginError").style.color = "var(--good)";
+    } catch (e) {
+      err.textContent = e.message || "Something went wrong — the link may have expired, request a new one.";
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  return true;
+}
+
 async function attemptLoginFlow() {
   const session = getSession();
   if (session && session.access_token) {
@@ -1454,7 +1511,9 @@ async function doLogin() {
   const password = document.getElementById("loginPassword").value;
   const btn = document.getElementById("loginBtn");
   btn.disabled = true;
-  document.getElementById("loginError").textContent = "";
+  const errEl = document.getElementById("loginError");
+  errEl.textContent = "";
+  errEl.style.color = ""; // reset in case a "password updated" success message left it green
   try {
     const session = await supabaseSignIn(email, password);
     saveSession(session);
@@ -1462,7 +1521,7 @@ async function doLogin() {
     hideLogin();
     renderAll();
   } catch (e) {
-    document.getElementById("loginError").textContent = "Wrong email or password";
+    errEl.textContent = "Wrong email or password";
   } finally {
     btn.disabled = false;
   }
@@ -1490,10 +1549,12 @@ document.getElementById("themeToggle").addEventListener("click", () => {
 updateThemeToggleIcon();
 
 renderAll();
-loadReal().then(ok => {
-  if (ok) { renderAll(); return; }
-  attemptLoginFlow();
-});
+if (!checkForPasswordRecovery()) {
+  loadReal().then(ok => {
+    if (ok) { renderAll(); return; }
+    attemptLoginFlow();
+  });
+}
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { updateThemeToggleIcon(); renderAll(); });
 </script>
 </body>
