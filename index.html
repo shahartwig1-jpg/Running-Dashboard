@@ -323,9 +323,22 @@
     font: inherit; font-size: 12px; cursor: pointer; color: var(--text-muted);
     background: none; border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px;
   }
+  #themeToggle {
+    font: inherit; font-size: 14px; cursor: pointer; color: var(--text-muted); line-height: 1;
+    background: none; border: 1px solid var(--border); border-radius: 999px; padding: 4px 9px;
+  }
 </style>
 </head>
 <body>
+<script>
+  // Applied before <body> renders, so the page never flashes the wrong theme on load.
+  // No saved choice = follow the OS/browser setting, handled entirely by the
+  // prefers-color-scheme CSS block above; this only kicks in once someone picks explicitly.
+  (function () {
+    const saved = localStorage.getItem("runDashboardTheme");
+    if (saved) document.documentElement.setAttribute("data-theme", saved);
+  })();
+</script>
 <div id="loginScreen">
   <div class="card">
     <h2>🏃 Running Group Dashboard</h2>
@@ -343,6 +356,7 @@
       <header>
         <h1>🏃 Running Group Dashboard</h1>
         <span class="demo-badge" id="badge">Demo data</span>
+        <button id="themeToggle" type="button" title="Toggle dark mode">🌙</button>
         <button id="signOutBtn" type="button" style="display:none">Sign out</button>
       </header>
       <div class="subtitle" id="subtitle">Five runners · demo data simulating what will arrive once watches are really connected</div>
@@ -1392,7 +1406,7 @@ async function loadFromSupabase(accessToken) {
 
   const [runnersRaw, activitiesRaw, sleepRaw, planRaw] = await Promise.all([
     supaGet(`runners?select=id,name,device&order=id`, accessToken),
-    supaGet(`activities?select=*&startTimeInSeconds=gte.${cutoffSec}&order=startTimeInSeconds.desc`, accessToken),
+    supaGet(`activities?select=*&startTimeInSeconds=gte.${cutoffSec}&hidden=eq.false&order=startTimeInSeconds.desc`, accessToken),
     supaGet(`sleep?select=*&date=gte.${cutoffDate}`, accessToken),
     supaGet(`plan_history?select=ownerId,weekStart,weekday,text&order=ownerId,weekStart,weekday`, accessToken),
   ]);
@@ -1457,12 +1471,30 @@ document.getElementById("loginBtn").addEventListener("click", doLogin);
 document.getElementById("loginPassword").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
 document.getElementById("signOutBtn").addEventListener("click", () => { clearSession(); location.reload(); });
 
+// Resolved theme = the explicit choice if one was made, else whatever the OS/browser
+// currently prefers — same rule the CSS above already follows.
+function resolvedTheme() {
+  return document.documentElement.getAttribute("data-theme") ||
+    (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+}
+function updateThemeToggleIcon() {
+  document.getElementById("themeToggle").textContent = resolvedTheme() === "dark" ? "☀️" : "🌙";
+}
+document.getElementById("themeToggle").addEventListener("click", () => {
+  const next = resolvedTheme() === "dark" ? "light" : "dark";
+  localStorage.setItem("runDashboardTheme", next);
+  document.documentElement.setAttribute("data-theme", next);
+  updateThemeToggleIcon();
+  renderAll(); // SVG charts read colors via getComputedStyle at render time, not live
+});
+updateThemeToggleIcon();
+
 renderAll();
 loadReal().then(ok => {
   if (ok) { renderAll(); return; }
   attemptLoginFlow();
 });
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { updateThemeToggleIcon(); renderAll(); });
 </script>
 </body>
 </html>
