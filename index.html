@@ -114,6 +114,8 @@
     padding: 3px 10px; background: var(--surface-1);
   }
   .hero .demo-badge { color: #fff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.14); }
+  .hero #themeToggle, .hero #signOutBtn { color: #fff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.14); }
+  .hero #themeToggle:hover, .hero #signOutBtn:hover { background: rgba(255,255,255,0.24); }
   .subtitle { font-size: 13px; color: var(--text-muted); margin-bottom: 18px; }
   .hero .subtitle { color: rgba(255,255,255,0.88); margin-bottom: 0; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
 
@@ -198,7 +200,10 @@
   .feed-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
   .feed-stats { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
   .feed-stats b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
-  .feed-photo { width: 100%; max-height: 220px; object-fit: cover; border-radius: 10px; margin-bottom: 8px; display: block; }
+  .feed-photo {
+    width: 100%; max-height: 420px; object-fit: contain; background: var(--grid);
+    border-radius: 10px; margin-bottom: 8px; display: block;
+  }
   .feed-engagement { display: flex; gap: 14px; font-size: 12px; color: var(--text-muted); }
   .feed-engagement span.active { color: var(--series-1); font-weight: 600; }
 
@@ -277,8 +282,8 @@
     display: flex; align-items: center; justify-content: center;
   }
   .comment-send-btn:hover { opacity: 0.9; }
-  .photo-gallery { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
-  .photo-gallery img { width: 84px; height: 84px; object-fit: cover; border-radius: 8px; cursor: pointer; }
+  .photo-gallery { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+  .photo-gallery img { width: 100%; max-height: 480px; object-fit: contain; background: var(--grid); border-radius: 8px; }
   .add-photo-btn {
     font: inherit; font-size: 12px; cursor: pointer; color: var(--text-secondary);
     background: var(--page); border: 1px dashed var(--baseline); border-radius: 8px; padding: 6px 12px;
