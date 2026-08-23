@@ -202,8 +202,10 @@
   .feed-stats b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
   .feed-photo {
     width: 100%; max-height: 420px; object-fit: contain; background: var(--grid);
-    border-radius: 10px; margin-bottom: 8px; display: block;
+    border-radius: 10px; margin-bottom: 8px; display: block; cursor: pointer;
+    transition: max-height 0.15s ease;
   }
+  .feed-photo.minimized { max-height: 90px; }
   .feed-engagement { display: flex; gap: 14px; font-size: 12px; color: var(--text-muted); }
   .feed-engagement span.active { color: var(--series-1); font-weight: 600; }
 
@@ -294,7 +296,11 @@
   }
   .comment-send-btn:hover { opacity: 0.9; }
   .photo-gallery { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
-  .photo-gallery img { width: 100%; max-height: 480px; object-fit: contain; background: var(--grid); border-radius: 8px; }
+  .photo-gallery img {
+    width: 100%; max-height: 480px; object-fit: contain; background: var(--grid);
+    border-radius: 8px; cursor: pointer; transition: max-height 0.15s ease;
+  }
+  .photo-gallery img.minimized { max-height: 90px; }
   .add-photo-btn {
     font: inherit; font-size: 12px; cursor: pointer; color: var(--text-secondary);
     background: var(--page); border: 1px dashed var(--baseline); border-radius: 8px; padding: 6px 12px;
@@ -1378,6 +1384,19 @@ async function loadEngagement(activityId) {
 
 function closeDetail() { document.getElementById("overlay").style.display = "none"; }
 document.getElementById("overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeDetail(); });
+
+// Click any activity/highlight photo to shrink it, click again to expand — one delegated
+// listener covers every photo everywhere (feed cards, detail panel, highlights), including
+// ones rendered after this listener was attached, so nothing needs to re-wire per render.
+// Capture phase (the `true` flag), not bubble — .feed-item's own "open detail panel" click
+// handler is attached directly to it, so it would fire before a normal bubble-phase
+// listener on body ever got a chance to stopPropagation(). Capture runs top-down first.
+document.body.addEventListener("click", e => {
+  const img = e.target.closest(".feed-photo, .photo-gallery img");
+  if (!img) return;
+  e.stopPropagation();
+  img.classList.toggle("minimized");
+}, true);
 
 function renderAll() { renderRunnerFilters(); renderWeekNav(); renderHighlights(); renderTiles(); renderBars(); renderSleep(); renderPlan(); renderWeekday(); renderFeed(); }
 
