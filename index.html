@@ -282,6 +282,11 @@
     padding: 12px; margin-bottom: 10px;
   }
   .highlight-pending-label { font-size: 11px; font-weight: 700; color: var(--series-3); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+
+  /* Upcoming races */
+  .race-rsvp-checkbox { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text-secondary); cursor: pointer; user-select: none; }
+  .race-rsvp-checkbox input { width: 16px; height: 16px; cursor: pointer; }
+  .race-rsvp-checkbox input:disabled { cursor: default; opacity: 0.5; }
   .avatar {
     flex: 0 0 28px; width: 28px; height: 28px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
@@ -456,6 +461,15 @@
     <div id="planChart"></div>
   </div>
 
+  <div class="card" id="racesCard">
+    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+      <h2>🏁 Upcoming races</h2>
+      <button id="raceAddBtn" class="week-nav-btn" type="button" style="display:none;">+ Add race</button>
+    </div>
+    <div id="raceAddForm"></div>
+    <div id="racesList"></div>
+  </div>
+
   <div class="card">
     <h2>Recent activities</h2>
     <div class="sub" id="tableSub"></div>
@@ -512,6 +526,8 @@ let PLAN_HISTORY = {}; // ownerId -> { weekStartISO -> array of 7 day strings (S
 let planWeekOffset = 0; // 0 = this week, -1 = last week, etc. — reset to 0 whenever the runner selection changes
 let planEditing = false; // reset to false whenever the runner/week changes, see below
 let HIGHLIGHTS = []; // weekly_highlights rows, each with a nested weekly_highlight_photos array
+let RACES = []; // races rows, each with a nested race_rsvps array ({ authorName }); [] until races.sql runs
+let raceFormOpen = false;
 
 function computeWeeks() {
   WEEKS = []; // oldest -> current
@@ -737,6 +753,106 @@ function renderHighlights() {
     }
   });
 }
+
+// Upcoming races: the coach adds/removes races (server-enforced via RLS, races.sql —
+// same pattern as the plan editor); anyone logged in can RSVP themselves in/out, which
+// just inserts/deletes their own row in race_rsvps (same presence-means-yes design as
+// the `likes` table). Past races drop off the list automatically once their date passes.
+function renderRaces() {
+  const addBtn = document.getElementById("raceAddBtn");
+  addBtn.style.display = isCoach() ? "" : "none";
+  renderRaceForm();
+
+  const session = getSession();
+  const me = session ? authorNameFromSession() : null;
+  const todayStr = new Date(TODAY.getTime() - TODAY.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const upcoming = RACES.filter(r => r.date >= todayStr).sort((a, b) => a.date.localeCompare(b.date));
+  const fmtRaceDate = iso => new Date(iso + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+
+  document.getElementById("racesList").innerHTML = upcoming.length ? upcoming.map(r => {
+    const attendees = r.race_rsvps || [];
+    const imIn = me !== null && attendees.some(a => a.authorName === me);
+    return `
+    <div class="highlight-post" data-id="${r.id}">
+      <div class="highlight-post-head" style="justify-content:space-between;">
+        <div>
+          <span class="highlight-author">${r.name}</span>
+          <span class="highlight-time">${fmtRaceDate(r.date)}${r.location ? " · " + r.location : ""}</span>
+        </div>
+        ${isCoach() ? `<button class="week-nav-btn race-delete-btn" type="button">Delete</button>` : ""}
+      </div>
+      ${session ? `
+        <label class="race-rsvp-checkbox">
+          <input type="checkbox" class="race-rsvp-input" ${imIn ? "checked" : ""}> I'm in
+        </label>` : ""}
+      ${attendees.length
+        ? `<div class="kudos-avatars">${attendees.map(a => avatarHtml(a.authorName)).join("")}<span style="margin-inline-start:10px; font-size:12px; color:var(--text-muted)">${attendees.map(a => a.authorName).join(", ")}</span></div>`
+        : `<div style="font-size:12px; color:var(--text-muted); margin-top:6px;">No one's confirmed yet</div>`}
+    </div>`;
+  }).join("") : `<div class="empty-note">No upcoming races${isCoach() ? " — click + Add race to add one" : ""}</div>`;
+
+  document.querySelectorAll(".race-rsvp-input").forEach(input => {
+    input.addEventListener("change", async () => {
+      const id = input.closest(".highlight-post").dataset.id;
+      input.disabled = true;
+      try {
+        await toggleRaceRsvp(id, getSession().access_token);
+        renderRaces();
+      } catch {
+        input.checked = !input.checked;
+        input.disabled = false;
+      }
+    });
+  });
+
+  document.querySelectorAll(".race-delete-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Delete this race?")) return;
+      const id = btn.closest(".highlight-post").dataset.id;
+      try {
+        await deleteRace(id, getSession().access_token);
+        RACES = RACES.filter(r => String(r.id) !== String(id));
+        renderRaces();
+      } catch {
+        alert("Failed to delete — try again");
+      }
+    });
+  });
+}
+
+function renderRaceForm() {
+  const el = document.getElementById("raceAddForm");
+  if (!raceFormOpen || !isCoach()) { el.innerHTML = ""; return; }
+  el.innerHTML = `
+    <div class="plan-edit-actions" style="flex-wrap:wrap; margin-top:0; margin-bottom:14px;">
+      <input type="text" id="raceNameInput" class="plan-edit-input" placeholder="Race name" style="flex:2 1 160px;">
+      <input type="date" id="raceDateInput" class="plan-edit-input" style="flex:1 1 140px;">
+      <input type="text" id="raceLocationInput" class="plan-edit-input" placeholder="Location (optional)" style="flex:2 1 140px;">
+      <button id="raceSaveBtn" class="week-nav-btn" type="button">Save</button>
+      <span id="raceSaveStatus" style="font-size:12px; color:var(--text-muted);"></span>
+    </div>`;
+  document.getElementById("raceSaveBtn").addEventListener("click", async () => {
+    const name = document.getElementById("raceNameInput").value.trim();
+    const date = document.getElementById("raceDateInput").value;
+    const location = document.getElementById("raceLocationInput").value.trim();
+    const status = document.getElementById("raceSaveStatus");
+    if (!name || !date) { status.textContent = "Name and date required"; return; }
+    status.textContent = "Saving…";
+    try {
+      const row = await addRace(name, date, location, getSession().access_token);
+      RACES.push({ ...row, race_rsvps: [] });
+      raceFormOpen = false;
+      renderRaces();
+    } catch {
+      status.textContent = "Failed — try again";
+    }
+  });
+}
+
+document.getElementById("raceAddBtn").addEventListener("click", () => {
+  raceFormOpen = !raceFormOpen;
+  renderRaceForm();
+});
 
 function renderRunnerFilters() {
   const el = document.getElementById("runnerFilters");
@@ -1409,7 +1525,7 @@ document.body.addEventListener("click", e => {
   btn.textContent = minimized ? "Expand" : "Minimize";
 }, true);
 
-function renderAll() { renderRunnerFilters(); renderWeekNav(); renderHighlights(); renderTiles(); renderBars(); renderSleep(); renderPlan(); renderWeekday(); renderFeed(); }
+function renderAll() { renderRunnerFilters(); renderWeekNav(); renderHighlights(); renderRaces(); renderTiles(); renderBars(); renderSleep(); renderPlan(); renderWeekday(); renderFeed(); }
 
 document.querySelectorAll('.filters[aria-label="Time range"] button').forEach(btn => {
   btn.addEventListener("click", () => {
@@ -1605,6 +1721,30 @@ async function moderateHighlight(id, status) {
   if (h) h.status = status;
 }
 
+async function addRace(name, date, location, accessToken) {
+  const [row] = await supaPostReturning("races", { name, date, location: location || null }, accessToken);
+  return row;
+}
+
+async function deleteRace(id, accessToken) {
+  await supaDelete(`races?id=eq.${id}`, accessToken);
+}
+
+// Presence of a race_rsvps row = "I'm in" (same design as the likes table); toggling just
+// inserts/deletes the current user's own row.
+async function toggleRaceRsvp(raceId, accessToken) {
+  const authorName = authorNameFromSession();
+  const race = RACES.find(r => String(r.id) === String(raceId));
+  const already = race.race_rsvps.some(a => a.authorName === authorName);
+  if (already) {
+    await supaDelete(`race_rsvps?raceId=eq.${raceId}&authorName=eq.${encodeURIComponent(authorName)}`, accessToken);
+    race.race_rsvps = race.race_rsvps.filter(a => a.authorName !== authorName);
+  } else {
+    await supaPost("race_rsvps", { raceId, authorName }, accessToken);
+    race.race_rsvps.push({ authorName });
+  }
+}
+
 // The email prefix (before @) doubles as the display name for comments/likes — nobody
 // but you has a real login yet, and this avoids needing a separate "your name" field.
 function authorNameFromSession() {
@@ -1628,20 +1768,22 @@ async function loadFromSupabase(accessToken) {
   const cutoffSec = Math.floor(Date.now() / 1000) - 90 * 86400;
   const cutoffDate = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
 
-  const [runnersRaw, activitiesRaw, sleepRaw, planRaw, highlightsRaw] = await Promise.all([
+  const [runnersRaw, activitiesRaw, sleepRaw, planRaw, highlightsRaw, racesRaw] = await Promise.all([
     supaGet(`runners?select=id,name,device&order=id`, accessToken),
     supaGet(`activities?select=*&startTimeInSeconds=gte.${cutoffSec}&order=startTimeInSeconds.desc`, accessToken),
     supaGet(`sleep?select=*&date=gte.${cutoffDate}`, accessToken),
     supaGet(`plan_history?select=ownerId,weekStart,weekday,text&order=ownerId,weekStart,weekday`, accessToken),
-    // Tolerates weekly_highlights not existing yet (pending migration) — never let a
+    // Tolerates weekly_highlights/races not existing yet (pending migration) — never let a
     // missing table break the whole login again, same mistake as earlier tonight.
     supaGet(`weekly_highlights?select=*,weekly_highlight_photos(*)&order=createdAt.desc`, accessToken).catch(() => []),
+    supaGet(`races?select=*,race_rsvps(authorName)&order=date`, accessToken).catch(() => []),
   ]);
 
   RUNNERS = runnersRaw.map((r, i) => ({ ...r, slot: (i % 8) + 1 }));
   ACTIVITIES = activitiesRaw;
   SLEEP = sleepRaw;
   HIGHLIGHTS = highlightsRaw;
+  RACES = racesRaw;
   PLAN_HISTORY = {};
   for (const row of planRaw) {
     PLAN_HISTORY[row.ownerId] ??= {};
