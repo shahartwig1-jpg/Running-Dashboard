@@ -200,12 +200,20 @@
   .feed-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
   .feed-stats { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
   .feed-stats b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
-  .feed-photo {
+  .photo-wrap { position: relative; margin-bottom: 8px; }
+  .photo-wrap.minimized { display: flex; justify-content: flex-end; }
+  .photo-wrap img {
     width: 100%; max-height: 420px; object-fit: contain; background: var(--grid);
-    border-radius: 10px; margin-bottom: 8px; display: block; cursor: pointer;
-    transition: max-height 0.15s ease;
+    border-radius: 10px; display: block; transition: max-height 0.15s ease, width 0.15s ease;
   }
-  .feed-photo.minimized { max-height: 90px; }
+  .photo-wrap.minimized img { width: auto; max-width: 220px; max-height: 90px; border-radius: 8px; }
+  .photo-toggle-btn {
+    position: absolute; top: 8px; right: 8px; z-index: 2;
+    font: inherit; font-size: 11px; cursor: pointer; color: #fff;
+    background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.4);
+    border-radius: 999px; padding: 3px 9px;
+  }
+  .photo-toggle-btn:hover { background: rgba(0,0,0,0.7); }
   .feed-engagement { display: flex; gap: 14px; font-size: 12px; color: var(--text-muted); }
   .feed-engagement span.active { color: var(--series-1); font-weight: 600; }
 
@@ -296,11 +304,6 @@
   }
   .comment-send-btn:hover { opacity: 0.9; }
   .photo-gallery { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
-  .photo-gallery img {
-    width: 100%; max-height: 480px; object-fit: contain; background: var(--grid);
-    border-radius: 8px; cursor: pointer; transition: max-height 0.15s ease;
-  }
-  .photo-gallery img.minimized { max-height: 90px; }
   .add-photo-btn {
     font: inherit; font-size: 12px; cursor: pointer; color: var(--text-secondary);
     background: var(--page); border: 1px dashed var(--baseline); border-radius: 8px; padding: 6px 12px;
@@ -650,7 +653,8 @@ function renderHighlights() {
   const pending = isCoach() ? forWeek.filter(h => h.status === "pending") : [];
 
   const photoGallery = h => (h.weekly_highlight_photos || []).length
-    ? `<div class="photo-gallery">${h.weekly_highlight_photos.map(p => `<img src="${p.url}" alt="Photo by ${p.authorName}">`).join("")}</div>` : "";
+    ? `<div class="photo-gallery">${h.weekly_highlight_photos.map(p => `
+        <div class="photo-wrap"><button class="photo-toggle-btn" type="button">Minimize</button><img src="${p.url}" alt="Photo by ${p.authorName}"></div>`).join("")}</div>` : "";
   const fmtWhen = iso => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
   const pendingEl = document.getElementById("highlightPending");
@@ -1080,7 +1084,10 @@ function renderFeed() {
           <span><b>${a.averageHeartRateInBeatsPerMinute ?? "-"}</b> bpm</span>
           <span class="device">${a.deviceName}</span>
         </div>
-        <img class="feed-photo" data-photo-for="${a.activityId}" style="display:none">
+        <div class="photo-wrap" data-photo-wrap-for="${a.activityId}" style="display:none">
+          <button class="photo-toggle-btn" type="button">Minimize</button>
+          <img class="feed-photo" data-photo-for="${a.activityId}">
+        </div>
         <div class="feed-engagement">
           <span data-kudos-for="${a.activityId}">👍 –</span>
           <span data-comments-for="${a.activityId}">💬 –</span>
@@ -1127,8 +1134,9 @@ async function loadFeedEngagement(activityIds) {
     photos.forEach(p => {
       if (seen.has(p.activityId)) return; // most recent photo per activity only
       seen.add(p.activityId);
-      const target = document.querySelector(`img[data-photo-for="${p.activityId}"]`);
-      if (target) { target.src = p.url; target.style.display = "block"; }
+      const img = document.querySelector(`img[data-photo-for="${p.activityId}"]`);
+      const wrap = document.querySelector(`[data-photo-wrap-for="${p.activityId}"]`);
+      if (img && wrap) { img.src = p.url; wrap.style.display = ""; }
     });
   } catch { } // activity_photos table may not exist yet — fine, feed just shows no photos
 }
@@ -1321,7 +1329,8 @@ async function loadEngagement(activityId) {
   const likerNames = (iLiked ? ["You"] : []).concat(otherLikers);
   setHtml(`
     <div class="section-title">Photos</div>
-    ${photos.length ? `<div class="photo-gallery">${photos.map(p => `<img src="${p.url}" alt="Photo by ${p.authorName}">`).join("")}</div>` : ""}
+    ${photos.length ? `<div class="photo-gallery">${photos.map(p => `
+      <div class="photo-wrap"><button class="photo-toggle-btn" type="button">Minimize</button><img src="${p.url}" alt="Photo by ${p.authorName}"></div>`).join("")}</div>` : ""}
     <label class="add-photo-btn">📷 Add photo<input type="file" id="photoInput" accept="image/*" style="display:none"></label>
     <div id="photoStatus" style="font-size:11px; color:var(--text-muted); margin-top:4px;"></div>
 
@@ -1385,17 +1394,19 @@ async function loadEngagement(activityId) {
 function closeDetail() { document.getElementById("overlay").style.display = "none"; }
 document.getElementById("overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeDetail(); });
 
-// Click any activity/highlight photo to shrink it, click again to expand — one delegated
-// listener covers every photo everywhere (feed cards, detail panel, highlights), including
-// ones rendered after this listener was attached, so nothing needs to re-wire per render.
+// Minimize/expand button on any activity/highlight photo (feed cards, detail panel,
+// highlights) — one delegated listener covers every photo everywhere, including ones
+// rendered after this listener was attached, so nothing needs to re-wire per render.
 // Capture phase (the `true` flag), not bubble — .feed-item's own "open detail panel" click
 // handler is attached directly to it, so it would fire before a normal bubble-phase
 // listener on body ever got a chance to stopPropagation(). Capture runs top-down first.
 document.body.addEventListener("click", e => {
-  const img = e.target.closest(".feed-photo, .photo-gallery img");
-  if (!img) return;
+  const btn = e.target.closest(".photo-toggle-btn");
+  if (!btn) return;
   e.stopPropagation();
-  img.classList.toggle("minimized");
+  const wrap = btn.closest(".photo-wrap");
+  const minimized = wrap.classList.toggle("minimized");
+  btn.textContent = minimized ? "Expand" : "Minimize";
 }, true);
 
 function renderAll() { renderRunnerFilters(); renderWeekNav(); renderHighlights(); renderTiles(); renderBars(); renderSleep(); renderPlan(); renderWeekday(); renderFeed(); }
