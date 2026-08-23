@@ -261,6 +261,17 @@
   .kudos-avatars { display: flex; align-items: center; margin-top: 10px; }
   .kudos-avatars .avatar { margin-inline-end: -8px; border: 2px solid var(--surface-1); }
   .comment-item { display: flex; gap: 9px; padding: 9px 0; }
+  .highlight-post { padding: 12px 0; border-bottom: 1px solid var(--grid); }
+  .highlight-post:last-child { border-bottom: none; }
+  .highlight-post-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+  .highlight-author { font-weight: 600; font-size: 13px; }
+  .highlight-time { font-size: 11px; color: var(--text-muted); }
+  .highlight-text { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; white-space: pre-wrap; }
+  .highlight-pending-item {
+    background: var(--page); border: 1px dashed var(--baseline); border-radius: 10px;
+    padding: 12px; margin-bottom: 10px;
+  }
+  .highlight-pending-label { font-size: 11px; font-weight: 700; color: var(--series-3); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
   .avatar {
     flex: 0 0 28px; width: 28px; height: 28px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
@@ -394,6 +405,14 @@
     </div>
   </div>
 
+  <div class="card" id="highlightCard">
+    <h2>🎉 Weekly group highlight</h2>
+    <div class="sub" id="highlightSub"></div>
+    <div id="highlightPending"></div>
+    <div id="highlightApproved"></div>
+    <div id="highlightSubmit"></div>
+  </div>
+
   <div class="tiles" id="tiles"></div>
 
   <div class="cards" id="cardsRow">
@@ -483,6 +502,7 @@ let SLEEP = [];
 let PLAN_HISTORY = {}; // ownerId -> { weekStartISO -> array of 7 day strings (Sun -> Sat) }
 let planWeekOffset = 0; // 0 = this week, -1 = last week, etc. — reset to 0 whenever the runner selection changes
 let planEditing = false; // reset to false whenever the runner/week changes, see below
+let HIGHLIGHTS = []; // weekly_highlights rows, each with a nested weekly_highlight_photos array
 
 function computeWeeks() {
   WEEKS = []; // oldest -> current
@@ -607,6 +627,105 @@ function renderWeekNav() {
   document.getElementById("weekRangeSub").textContent =
     `${fmtDateEn(start)} – ${fmtDateEn(end)}` + (weekOffset === 0 ? " (this week)" : "");
   document.getElementById("weekNext").disabled = weekOffset >= 0; // can't browse into weeks that haven't happened yet
+}
+
+// Weekly group highlight: anyone logged in can submit a description + photos for the
+// currently-viewed week; only the coach can see/approve pending ones (RLS-enforced, see
+// weekly_highlights.sql — this client-side isCoach() gate is only for hiding the review
+// UI from everyone else, same pattern as the plan editor). Approved posts show to everyone.
+function renderHighlights() {
+  const { start, end } = weekBounds();
+  const weekStartStr = start.toISOString().slice(0, 10);
+  document.getElementById("highlightSub").textContent =
+    `${fmtDateEn(start)} – ${fmtDateEn(end)}` + (weekOffset === 0 ? " (this week)" : "");
+
+  const forWeek = HIGHLIGHTS.filter(h => h.weekStart === weekStartStr);
+  const approved = forWeek.filter(h => h.status === "approved");
+  const pending = isCoach() ? forWeek.filter(h => h.status === "pending") : [];
+
+  const photoGallery = h => (h.weekly_highlight_photos || []).length
+    ? `<div class="photo-gallery">${h.weekly_highlight_photos.map(p => `<img src="${p.url}" alt="Photo by ${p.authorName}">`).join("")}</div>` : "";
+  const fmtWhen = iso => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
+  const pendingEl = document.getElementById("highlightPending");
+  pendingEl.innerHTML = pending.map(h => `
+    <div class="highlight-pending-item" data-id="${h.id}">
+      <div class="highlight-pending-label">Pending your approval</div>
+      <div class="highlight-post-head">
+        <span class="highlight-author">${h.authorName}</span>
+        <span class="highlight-time">${fmtWhen(h.createdAt)}</span>
+      </div>
+      <div class="highlight-text">${h.description}</div>
+      ${photoGallery(h)}
+      <div class="plan-edit-actions">
+        <button class="week-nav-btn highlight-approve-btn" type="button">Approve</button>
+        <button class="week-nav-btn highlight-reject-btn" type="button">Reject</button>
+        <span class="highlight-status-msg" style="font-size:12px; color:var(--text-muted);"></span>
+      </div>
+    </div>`).join("");
+  pendingEl.querySelectorAll(".highlight-approve-btn, .highlight-reject-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const item = btn.closest(".highlight-pending-item");
+      const msg = item.querySelector(".highlight-status-msg");
+      msg.textContent = "Saving…";
+      try {
+        await moderateHighlight(item.dataset.id, btn.classList.contains("highlight-approve-btn") ? "approved" : "rejected");
+        renderHighlights();
+      } catch {
+        msg.textContent = "Failed — try again";
+      }
+    });
+  });
+
+  document.getElementById("highlightApproved").innerHTML = approved.length ? approved.map(h => `
+    <div class="highlight-post">
+      <div class="highlight-post-head">
+        <span class="highlight-author">${h.authorName}</span>
+        <span class="highlight-time">${fmtWhen(h.createdAt)}</span>
+      </div>
+      <div class="highlight-text">${h.description}</div>
+      ${photoGallery(h)}
+    </div>`).join("") : `<div class="empty-note">No highlight posted for this week yet</div>`;
+
+  const submitEl = document.getElementById("highlightSubmit");
+  const session = getSession();
+  if (!session?.access_token) {
+    submitEl.innerHTML = `<div class="empty-note" style="margin-top:10px;">Log in (top of the page) to submit a highlight.</div>`;
+    return;
+  }
+  submitEl.innerHTML = `
+    <div class="section-title" style="margin-top:14px;">Submit a highlight for this week</div>
+    <textarea id="highlightText" class="plan-edit-input" rows="3"
+      style="width:100%; margin-top:8px; box-sizing:border-box; resize:vertical; font-family:inherit;"
+      placeholder="What happened this week? Tell the group..."></textarea>
+    <label class="add-photo-btn" style="margin-top:8px; display:inline-block;">📷 Add photos<input type="file" id="highlightPhotoInput" accept="image/*" multiple style="display:none"></label>
+    <div id="highlightPhotoPreview" style="font-size:11px; color:var(--text-muted); margin-top:4px;"></div>
+    <div class="plan-edit-actions">
+      <button id="highlightSubmitBtn" class="week-nav-btn" type="button">Submit for approval</button>
+      <span id="highlightSubmitStatus" style="font-size:12px; color:var(--text-muted);"></span>
+    </div>`;
+
+  let pendingFiles = [];
+  document.getElementById("highlightPhotoInput").addEventListener("change", e => {
+    pendingFiles = [...e.target.files];
+    document.getElementById("highlightPhotoPreview").textContent = pendingFiles.length ? `${pendingFiles.length} photo(s) selected` : "";
+  });
+  document.getElementById("highlightSubmitBtn").addEventListener("click", async () => {
+    const status = document.getElementById("highlightSubmitStatus");
+    const text = document.getElementById("highlightText").value.trim();
+    if (!text) { status.textContent = "Write something first"; return; }
+    status.textContent = "Submitting…";
+    try {
+      await submitHighlight(weekStartStr, text, pendingFiles, session.access_token);
+      status.textContent = "Submitted — waiting for approval";
+      document.getElementById("highlightText").value = "";
+      document.getElementById("highlightPhotoPreview").textContent = "";
+      pendingFiles = [];
+      if (isCoach()) renderHighlights(); // the coach's own submission shows in "pending" immediately
+    } catch {
+      status.textContent = "Something went wrong — try again";
+    }
+  });
 }
 
 function renderRunnerFilters() {
@@ -1260,7 +1379,7 @@ async function loadEngagement(activityId) {
 function closeDetail() { document.getElementById("overlay").style.display = "none"; }
 document.getElementById("overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeDetail(); });
 
-function renderAll() { renderRunnerFilters(); renderWeekNav(); renderTiles(); renderBars(); renderSleep(); renderPlan(); renderWeekday(); renderFeed(); }
+function renderAll() { renderRunnerFilters(); renderWeekNav(); renderHighlights(); renderTiles(); renderBars(); renderSleep(); renderPlan(); renderWeekday(); renderFeed(); }
 
 document.querySelectorAll('.filters[aria-label="Time range"] button').forEach(btn => {
   btn.addEventListener("click", () => {
@@ -1286,12 +1405,12 @@ document.getElementById("planNext").addEventListener("click", () => { if (planWe
 
 document.getElementById("weekPrev").addEventListener("click", () => {
   weekOffset--;
-  renderWeekNav(); renderTiles(); renderBars(); renderWeekday();
+  renderWeekNav(); renderTiles(); renderBars(); renderWeekday(); renderHighlights();
 });
 document.getElementById("weekNext").addEventListener("click", () => {
   if (weekOffset >= 0) return; // can't browse into weeks that haven't happened yet
   weekOffset++;
-  renderWeekNav(); renderTiles(); renderBars(); renderWeekday();
+  renderWeekNav(); renderTiles(); renderBars(); renderWeekday(); renderHighlights();
 });
 
 /* Real data, if fetch-data.js has produced any; otherwise the demo above stands. */
@@ -1396,19 +1515,64 @@ async function supaDelete(pathWithQuery, accessToken) {
   if (!res.ok) throw new Error("Supabase delete failed: " + pathWithQuery);
 }
 
+// Same as supaPost, but returns the inserted row(s) — needed when a follow-up action
+// (like uploading photos) has to reference the new row's id.
+async function supaPostReturning(table, body, accessToken) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: "POST",
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json", Prefer: "return=representation" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error("Supabase insert failed: " + table);
+  return res.json();
+}
+
+async function supaPatch(pathWithQuery, body, accessToken) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${pathWithQuery}`, {
+    method: "PATCH",
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error("Supabase update failed: " + pathWithQuery);
+}
+
 const PHOTO_BUCKET = "activity-photos";
-async function uploadPhoto(activityId, file, authorName, accessToken) {
+async function uploadToPhotoStorage(pathPrefix, file, accessToken) {
   const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-  const path = `${activityId}/${Date.now()}.${ext}`;
+  const path = `${pathPrefix}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
   const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${PHOTO_BUCKET}/${path}`, {
     method: "POST",
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}`, "Content-Type": file.type || "application/octet-stream" },
     body: file,
   });
   if (!res.ok) throw new Error("Photo upload failed");
-  const url = `${SUPABASE_URL}/storage/v1/object/public/${PHOTO_BUCKET}/${path}`;
+  return `${SUPABASE_URL}/storage/v1/object/public/${PHOTO_BUCKET}/${path}`;
+}
+async function uploadPhoto(activityId, file, authorName, accessToken) {
+  const url = await uploadToPhotoStorage(activityId, file, accessToken);
   await supaPost("activity_photos", { activityId, authorName, url }, accessToken);
   return url;
+}
+async function uploadHighlightPhoto(highlightId, file, authorName, accessToken) {
+  const url = await uploadToPhotoStorage(`highlights/${highlightId}`, file, accessToken);
+  await supaPost("weekly_highlight_photos", { highlightId, authorName, url }, accessToken);
+  return url;
+}
+
+async function submitHighlight(weekStartStr, description, files, accessToken) {
+  const authorName = authorNameFromSession();
+  const [row] = await supaPostReturning("weekly_highlights", { weekStart: weekStartStr, authorName, description }, accessToken);
+  for (const file of files) {
+    await uploadHighlightPhoto(row.id, file, authorName, accessToken);
+  }
+  HIGHLIGHTS.push({ ...row, weekly_highlight_photos: [] }); // photos aren't reflected locally until next reload — fine, submitter sees "pending" either way
+}
+
+async function moderateHighlight(id, status) {
+  const session = getSession();
+  await supaPatch(`weekly_highlights?id=eq.${id}`, { status }, session.access_token);
+  const h = HIGHLIGHTS.find(x => String(x.id) === String(id));
+  if (h) h.status = status;
 }
 
 // The email prefix (before @) doubles as the display name for comments/likes — nobody
@@ -1434,16 +1598,20 @@ async function loadFromSupabase(accessToken) {
   const cutoffSec = Math.floor(Date.now() / 1000) - 90 * 86400;
   const cutoffDate = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
 
-  const [runnersRaw, activitiesRaw, sleepRaw, planRaw] = await Promise.all([
+  const [runnersRaw, activitiesRaw, sleepRaw, planRaw, highlightsRaw] = await Promise.all([
     supaGet(`runners?select=id,name,device&order=id`, accessToken),
     supaGet(`activities?select=*&startTimeInSeconds=gte.${cutoffSec}&order=startTimeInSeconds.desc`, accessToken),
     supaGet(`sleep?select=*&date=gte.${cutoffDate}`, accessToken),
     supaGet(`plan_history?select=ownerId,weekStart,weekday,text&order=ownerId,weekStart,weekday`, accessToken),
+    // Tolerates weekly_highlights not existing yet (pending migration) — never let a
+    // missing table break the whole login again, same mistake as earlier tonight.
+    supaGet(`weekly_highlights?select=*,weekly_highlight_photos(*)&order=createdAt.desc`, accessToken).catch(() => []),
   ]);
 
   RUNNERS = runnersRaw.map((r, i) => ({ ...r, slot: (i % 8) + 1 }));
   ACTIVITIES = activitiesRaw;
   SLEEP = sleepRaw;
+  HIGHLIGHTS = highlightsRaw;
   PLAN_HISTORY = {};
   for (const row of planRaw) {
     PLAN_HISTORY[row.ownerId] ??= {};
