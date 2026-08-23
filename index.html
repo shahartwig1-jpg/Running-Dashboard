@@ -1431,7 +1431,7 @@ async function loadFromSupabase(accessToken) {
 
   const [runnersRaw, activitiesRaw, sleepRaw, planRaw] = await Promise.all([
     supaGet(`runners?select=id,name,device&order=id`, accessToken),
-    supaGet(`activities?select=*&startTimeInSeconds=gte.${cutoffSec}&hidden=eq.false&order=startTimeInSeconds.desc`, accessToken),
+    supaGet(`activities?select=*&startTimeInSeconds=gte.${cutoffSec}&order=startTimeInSeconds.desc`, accessToken),
     supaGet(`sleep?select=*&date=gte.${cutoffDate}`, accessToken),
     supaGet(`plan_history?select=ownerId,weekStart,weekday,text&order=ownerId,weekStart,weekday`, accessToken),
   ]);
@@ -1514,14 +1514,23 @@ async function doLogin() {
   const errEl = document.getElementById("loginError");
   errEl.textContent = "";
   errEl.style.color = ""; // reset in case a "password updated" success message left it green
+  let session;
   try {
-    const session = await supabaseSignIn(email, password);
-    saveSession(session);
+    session = await supabaseSignIn(email, password);
+  } catch (e) {
+    errEl.textContent = "Wrong email or password";
+    btn.disabled = false;
+    return;
+  }
+  // Credentials were correct at this point — any error from here on is NOT a password
+  // problem, so it must not be reported as one (that's what was hiding the real issue).
+  saveSession(session);
+  try {
     await loadFromSupabase(session.access_token);
     hideLogin();
     renderAll();
   } catch (e) {
-    errEl.textContent = "Wrong email or password";
+    errEl.textContent = "Logged in, but couldn't load your data: " + (e.message || "unknown error");
   } finally {
     btn.disabled = false;
   }
