@@ -7,7 +7,10 @@ name: Fetch running data
 
 on:
   schedule:
-    - cron: "0 */6 * * *" # every 6 hours
+    # Offset from :00 on purpose — GitHub's own docs warn that the top of every hour is
+    # the highest-load time for the schedule event and gets delayed most, sometimes by
+    # hours (confirmed here: actual gaps between runs were 6-11.5h instead of a clean 6).
+    - cron: "17 */6 * * *" # every 6 hours, at :17 past to dodge the top-of-hour queue
   workflow_dispatch: {} # lets you trigger a run manually from the Actions tab, for testing
 
 jobs:
