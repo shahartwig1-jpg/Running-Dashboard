@@ -971,7 +971,7 @@ function renderPlan() {
     // session, e.g. "we're all doing this tomorrow"), rather than repeating the single-
     // runner editor once per person.
     prevBtn.disabled = false;
-    nextBtn.disabled = planWeekOffset >= 0;
+    nextBtn.disabled = false; // unlike activity data, plans are written in advance — future weeks are valid
     const start = new Date(weekStart(TODAY).getTime() + planWeekOffset * 7 * DAY);
     const weekStartStr = start.toISOString().slice(0, 10);
     const weekEnd = new Date(start.getTime() + 6 * DAY);
@@ -980,7 +980,7 @@ function renderPlan() {
     return;
   }
   prevBtn.disabled = false;
-  nextBtn.disabled = planWeekOffset >= 0; // can't browse into weeks that haven't happened yet
+  nextBtn.disabled = false; // unlike activity data, plans are written in advance — future weeks are valid
   editBtn.style.display = isCoach() ? "" : "none";
   editBtn.textContent = planEditing ? "Cancel" : "Edit";
 
@@ -1547,7 +1547,7 @@ document.getElementById("runnerFilters").addEventListener("click", e => {
 
 document.getElementById("planEditBtn").addEventListener("click", () => { planEditing = !planEditing; renderPlan(); });
 document.getElementById("planPrev").addEventListener("click", () => { planWeekOffset--; planEditing = false; renderPlan(); });
-document.getElementById("planNext").addEventListener("click", () => { if (planWeekOffset < 0) { planWeekOffset++; planEditing = false; renderPlan(); } });
+document.getElementById("planNext").addEventListener("click", () => { planWeekOffset++; planEditing = false; renderPlan(); });
 
 document.getElementById("weekPrev").addEventListener("click", () => {
   weekOffset--;
