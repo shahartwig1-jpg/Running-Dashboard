@@ -599,7 +599,7 @@ const fmtDur = sec => {
 const runnerById = id => RUNNERS.find(r => r.id === id);
 const WEEKDAY_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]; // index = Date#getDay(), always Sun -> Sat, left to right
 const fmtDateEn = d => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-const fmtDate = ts => fmtDateEn(new Date(ts * 1000));
+const fmtDate = ts => new Date(ts * 1000).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 const tooltip = document.getElementById("tooltip");
 function showTip(html, x, y) {
