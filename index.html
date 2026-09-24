@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#2a78d6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Angels">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <title>Running Group Dashboard — Demo</title>
 <style>
   :root {
@@ -120,8 +126,8 @@
     padding: 3px 10px; background: var(--surface-1);
   }
   .hero .demo-badge { color: #fff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.14); }
-  .hero #themeToggle, .hero #signOutBtn { color: #fff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.14); }
-  .hero #themeToggle:hover, .hero #signOutBtn:hover { background: rgba(255,255,255,0.24); }
+  .hero #themeToggle, .hero #signOutBtn, .hero #notifyBtn { color: #fff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.14); }
+  .hero #themeToggle:hover, .hero #signOutBtn:hover, .hero #notifyBtn:hover { background: rgba(255,255,255,0.24); }
   .subtitle { font-size: 13px; color: var(--text-muted); margin-bottom: 18px; }
   .hero .subtitle { color: rgba(255,255,255,0.88); margin-bottom: 0; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
 
@@ -359,6 +365,11 @@
     font: inherit; font-size: 12px; cursor: pointer; color: var(--text-muted);
     background: none; border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px;
   }
+  #notifyBtn {
+    font: inherit; font-size: 12px; cursor: pointer; color: var(--text-muted);
+    background: none; border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px;
+  }
+  #notifyBtn:disabled { opacity: 0.6; cursor: default; }
   #themeToggle {
     font: inherit; font-size: 14px; cursor: pointer; color: var(--text-muted); line-height: 1;
     background: none; border: 1px solid var(--border); border-radius: 999px; padding: 4px 9px;
@@ -404,6 +415,7 @@
         <h1>🏃 Running Group Dashboard</h1>
         <span class="demo-badge" id="badge">Demo data</span>
         <button id="themeToggle" type="button" title="Toggle dark mode">🌙</button>
+        <button id="notifyBtn" type="button" style="display:none">🔔 Notify me</button>
         <button id="signOutBtn" type="button" style="display:none">Sign out</button>
       </header>
       <div class="subtitle" id="subtitle">Five runners · demo data simulating what will arrive once watches are really connected</div>
@@ -1057,6 +1069,7 @@ async function savePlanWeek(ownerId, weekStartStr, texts) {
   await supaUpsert("plan_history", rows, "ownerId,weekStart,weekday", session.access_token);
   PLAN_HISTORY[ownerId] ??= {};
   PLAN_HISTORY[ownerId][weekStartStr] = texts;
+  notifyPush({ type: "plan", ownerIds: [ownerId] });
 }
 
 // One workout, applied to several runners' plans at once — e.g. a shared group session
@@ -1111,6 +1124,7 @@ async function saveSharedWorkout(weekStartStr, weekday, text, ownerIds) {
     PLAN_HISTORY[ownerId][weekStartStr] ??= new Array(7).fill(null);
     PLAN_HISTORY[ownerId][weekStartStr][weekday] = text;
   }
+  notifyPush({ type: "plan", ownerIds });
 }
 
 function renderWeekday() {
@@ -1496,7 +1510,7 @@ async function loadEngagement(activityId) {
   document.getElementById("likeBtn").addEventListener("click", async () => {
     try {
       if (iLiked) await supaDelete(`likes?activityId=eq.${encodeURIComponent(activityId)}&authorName=eq.${encodeURIComponent(me)}`, token);
-      else await supaPost("likes", { activityId, authorName: me }, token);
+      else { await supaPost("likes", { activityId, authorName: me }, token); notifyPush({ type: "like", activityId }); }
       loadEngagement(activityId);
     } catch { }
   });
@@ -1506,6 +1520,7 @@ async function loadEngagement(activityId) {
     if (!text) return;
     try {
       await supaPost("comments", { activityId, authorName: me, text }, token);
+      notifyPush({ type: "comment", activityId, text });
       loadEngagement(activityId);
     } catch { }
   };
@@ -1600,10 +1615,32 @@ const SESSION_KEY = "runDashboardSession";
 // rejected by Postgres on save.
 const COACH_EMAIL = "shahartwig1@gmail.com";
 
-function saveSession(s) { sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
-function getSession() { try { return JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch { return null; } }
-function clearSession() { sessionStorage.removeItem(SESSION_KEY); }
+// localStorage (not sessionStorage) so the installed phone app stays logged in between
+// opens; the refresh token below renews the ~1h access token without asking for the password.
+function saveSession(s) { try { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch { } }
+function getSession() { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; } }
+function clearSession() { try { localStorage.removeItem(SESSION_KEY); } catch { } }
 function isCoach() { return getSession()?.user?.email === COACH_EMAIL; }
+
+function sessionExpiresSoon(s) { return !s?.expires_at || s.expires_at * 1000 - Date.now() < 120000; }
+async function refreshSession() {
+  const s = getSession();
+  if (!s?.refresh_token) throw new Error("no refresh token");
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+    method: "POST",
+    headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: s.refresh_token }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error_description || body.msg || "refresh failed");
+  saveSession(body);
+  return body;
+}
+// Keeps a long-open tab/app working (writes used to fail silently after the first hour).
+setInterval(() => { if (getSession() && sessionExpiresSoon(getSession())) refreshSession().catch(() => { }); }, 60000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && getSession() && sessionExpiresSoon(getSession())) refreshSession().catch(() => { });
+});
 
 async function supabaseSignIn(email, password) {
   const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
@@ -1718,6 +1755,7 @@ async function submitHighlight(weekStartStr, description, files, accessToken) {
     await uploadHighlightPhoto(row.id, file, authorName, accessToken);
   }
   HIGHLIGHTS.push({ ...row, weekly_highlight_photos: [] }); // photos aren't reflected locally until next reload — fine, submitter sees "pending" either way
+  if (!isCoach()) notifyPush({ type: "highlight_submitted" }); // the coach's own submission needs no alert to the coach
 }
 
 async function moderateHighlight(id, status) {
@@ -1725,10 +1763,12 @@ async function moderateHighlight(id, status) {
   await supaPatch(`weekly_highlights?id=eq.${id}`, { status }, session.access_token);
   const h = HIGHLIGHTS.find(x => String(x.id) === String(id));
   if (h) h.status = status;
+  if (status === "approved") notifyPush({ type: "highlight_approved" });
 }
 
 async function addRace(name, date, location, accessToken) {
   const [row] = await supaPostReturning("races", { name, date, location: location || null }, accessToken);
+  notifyPush({ type: "race", name, date });
   return row;
 }
 
@@ -1770,6 +1810,97 @@ function avatarHtml(name) {
   return `<div class="avatar" style="background:${colorFromName(name)}">${(name[0] || "?").toUpperCase()}</div>`;
 }
 
+/* ---------- Push notifications (supabase/push_subscriptions.sql + functions/notify-push) ---------- */
+const VAPID_PUBLIC_KEY = "BMXeFiz2lR1htoTFtKH4o0fzKIlhrW9kN5Fs1oFVHjn9SACLpI4LSwjHOjW0O1aoOzyFlo0_K2Xp1Pkj6vxAbHY"; // public half only; the private half lives in Supabase secrets
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+
+function urlBase64ToUint8Array(b64) {
+  const pad = "=".repeat((4 - b64.length % 4) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(raw, c => c.charCodeAt(0));
+}
+
+async function currentPushSubscription() {
+  if (!pushSupported()) return null;
+  const reg = await navigator.serviceWorker.getRegistration();
+  return reg ? reg.pushManager.getSubscription() : null;
+}
+
+// Asks the notify-push Edge Function to send a notification. Returns the fetch promise so a
+// caller that cares (the test message) can inspect it; notifyPush() is fire-and-forget, so a
+// missing/undeployed function can never break the action that triggered it.
+function callNotifyPush(payload) {
+  const s = getSession();
+  if (!s?.access_token) return Promise.reject(new Error("not logged in"));
+  return fetch(`${SUPABASE_URL}/functions/v1/notify-push`, {
+    method: "POST",
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${s.access_token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+function notifyPush(payload) { callNotifyPush(payload).catch(() => { }); }
+
+async function updateNotifyBtn() {
+  const btn = document.getElementById("notifyBtn");
+  if (!getSession()?.access_token || (!pushSupported() && !isIOS())) { btn.style.display = "none"; return; }
+  btn.style.display = "";
+  const sub = await currentPushSubscription().catch(() => null);
+  btn.textContent = sub && Notification.permission === "granted" ? "🔔 On" : "🔔 Notify me";
+}
+
+async function enablePush() {
+  if (!pushSupported()) {
+    alert(isIOS()
+      ? "On iPhone: open this page in Safari, tap the Share button, choose “Add to Home Screen”, then open the app from your home screen and tap 🔔 again."
+      : "This browser doesn't support notifications.");
+    return;
+  }
+  if (await Notification.requestPermission() !== "granted") {
+    alert("Notifications are blocked. Allow them for this site in your browser or phone settings, then tap 🔔 again.");
+    return;
+  }
+  const session = getSession();
+  const reg = await navigator.serviceWorker.ready;
+  const sub = (await reg.pushManager.getSubscription()) ||
+    await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+  const j = sub.toJSON();
+  await supaUpsert("push_subscriptions", [{
+    endpoint: j.endpoint, userId: session.user.id, email: session.user.email.toLowerCase(),
+    p256dh: j.keys.p256dh, auth: j.keys.auth,
+  }], "endpoint", session.access_token);
+  try {
+    const r = await callNotifyPush({ type: "test" });
+    const out = await r.json().catch(() => ({}));
+    if (!r.ok || !out.sent) alert("Notifications are on, but the test message didn't arrive (" + (out.error || out.note || "HTTP " + r.status) + ").");
+  } catch {
+    alert("Notifications are on, but the sender isn't reachable yet — the notify-push function may not be deployed.");
+  }
+}
+
+async function disablePush() {
+  const sub = await currentPushSubscription();
+  if (!sub) return;
+  const s = getSession();
+  if (s?.access_token) await supaDelete(`push_subscriptions?endpoint=eq.${encodeURIComponent(sub.endpoint)}`, s.access_token).catch(() => { });
+  await sub.unsubscribe();
+}
+
+document.getElementById("notifyBtn").addEventListener("click", async e => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    const on = pushSupported() && (await currentPushSubscription()) && Notification.permission === "granted";
+    if (on) { if (confirm("Turn off notifications on this device?")) await disablePush(); }
+    else await enablePush();
+  } catch (err) {
+    alert("Couldn't change notifications: " + (err.message || err));
+  } finally {
+    btn.disabled = false;
+    updateNotifyBtn();
+  }
+});
+
 async function loadFromSupabase(accessToken) {
   const cutoffSec = Math.floor(Date.now() / 1000) - 90 * 86400;
   const cutoffDate = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
@@ -1802,6 +1933,7 @@ async function loadFromSupabase(accessToken) {
   document.getElementById("badge").textContent = "Real data · Supabase";
   document.getElementById("subtitle").textContent = `${RUNNERS.length} runners · ${ACTIVITIES.length} runs`;
   document.getElementById("signOutBtn").style.display = "";
+  updateNotifyBtn();
 }
 
 function showLogin(errorMsg) {
@@ -1815,7 +1947,7 @@ function hideLogin() { document.getElementById("loginScreen").style.display = "n
 // normal login form, and skip attemptLoginFlow entirely so it doesn't also run.
 function checkForPasswordRecovery() {
   const params = new URLSearchParams(location.hash.slice(1));
-  if (params.get("type") !== "recovery" || !params.get("access_token")) return false;
+  if (!["recovery", "invite"].includes(params.get("type")) || !params.get("access_token")) return false; // "invite" = a new member's first-time link from the Supabase dashboard
   const token = params.get("access_token");
   history.replaceState(null, "", location.pathname + location.search); // scrub the token from the URL/address bar
   document.getElementById("resetScreen").style.display = "flex";
@@ -1843,9 +1975,10 @@ function checkForPasswordRecovery() {
 }
 
 async function attemptLoginFlow() {
-  const session = getSession();
+  let session = getSession();
   if (session && session.access_token) {
     try {
+      if (sessionExpiresSoon(session)) session = await refreshSession();
       await loadFromSupabase(session.access_token);
       hideLogin();
       renderAll();
@@ -1888,7 +2021,14 @@ async function doLogin() {
 }
 document.getElementById("loginBtn").addEventListener("click", doLogin);
 document.getElementById("loginPassword").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
-document.getElementById("signOutBtn").addEventListener("click", () => { clearSession(); location.reload(); });
+// Sign-out also removes this phone from the notification list, so the next person to log in
+// on the same device doesn't inherit (or collide with) the previous person's subscription.
+document.getElementById("signOutBtn").addEventListener("click", async () => {
+  try { await disablePush(); } catch { }
+  clearSession();
+  location.reload();
+});
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => { });
 
 // Resolved theme = the explicit choice if one was made, else whatever the OS/browser
 // currently prefers — same rule the CSS above already follows.

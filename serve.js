@@ -7,7 +7,7 @@ const PORT = 8371;
 const ROOT = __dirname;
 
 // Never serve these, even locally — the browser has no business reading them.
-const BLOCKED = new Set(["key.txt", "config.json", "config.example.json"]);
+const BLOCKED = new Set(["key.txt", "config.json", "config.example.json", "vapid-private.txt", "vapid-public.txt"]);
 
 const server = http.createServer((req, res) => {
   const urlPath = decodeURIComponent(req.url.split("?")[0]);
@@ -21,6 +21,7 @@ const server = http.createServer((req, res) => {
       : file.endsWith(".json") ? "application/json; charset=utf-8"
       : file.endsWith(".jpg") || file.endsWith(".jpeg") ? "image/jpeg"
       : file.endsWith(".png") ? "image/png"
+      : file.endsWith(".webmanifest") ? "application/manifest+json"
       : "application/octet-stream";
     res.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store" });
     res.end(data);

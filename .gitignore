@@ -13,3 +13,7 @@ data.json
 details/
 dashboard.db
 dashboard.db-*
+
+# Push notification private signing key
+vapid-private.txt
+vapid-public.txt

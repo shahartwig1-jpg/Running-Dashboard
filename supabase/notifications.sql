@@ -10,3 +10,7 @@ create table if not exists runner_emails (
   "ownerId" text primary key references runners(id),
   email text not null
 );
+
+-- Required for new tables from Oct 30 (Supabase stopped granting API access automatically).
+-- service_role only, on purpose — see the comment at the top of this file.
+grant select, insert, update, delete on public.runner_emails to service_role;
