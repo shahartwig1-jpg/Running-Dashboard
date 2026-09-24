@@ -618,6 +618,10 @@ const runnerById = id => RUNNERS.find(r => r.id === id);
 const WEEKDAY_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]; // index = Date#getDay(), always Sun -> Sat, left to right
 const fmtDateEn = d => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 const fmtDate = ts => new Date(ts * 1000).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+// Everything users can type (comments, highlights, race names, activity names...) goes through esc() before it is put into
+// the page as HTML — otherwise text like <img onerror=...> would run in other members' browsers.
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const safeUrl = u => String(u ?? "").toLowerCase().startsWith("https://") ? String(u) : "";
 
 const tooltip = document.getElementById("tooltip");
 function showTip(html, x, y) {
@@ -688,7 +692,7 @@ function renderHighlights() {
 
   const photoGallery = h => (h.weekly_highlight_photos || []).length
     ? `<div class="photo-gallery">${h.weekly_highlight_photos.map(p => `
-        <div class="photo-wrap"><button class="photo-toggle-btn" type="button">Minimize</button><img src="${p.url}" alt="Photo by ${p.authorName}"></div>`).join("")}</div>` : "";
+        <div class="photo-wrap"><button class="photo-toggle-btn" type="button">Minimize</button><img src="${esc(safeUrl(p.url))}" alt="Photo by ${esc(p.authorName)}"></div>`).join("")}</div>` : "";
   const fmtWhen = iso => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
   const pendingEl = document.getElementById("highlightPending");
@@ -696,10 +700,10 @@ function renderHighlights() {
     <div class="highlight-pending-item" data-id="${h.id}">
       <div class="highlight-pending-label">Pending your approval</div>
       <div class="highlight-post-head">
-        <span class="highlight-author">${h.authorName}</span>
+        <span class="highlight-author">${esc(h.authorName)}</span>
         <span class="highlight-time">${fmtWhen(h.createdAt)}</span>
       </div>
-      <div class="highlight-text">${h.description}</div>
+      <div class="highlight-text">${esc(h.description)}</div>
       ${photoGallery(h)}
       <div class="plan-edit-actions">
         <button class="week-nav-btn highlight-approve-btn" type="button">Approve</button>
@@ -724,10 +728,10 @@ function renderHighlights() {
   document.getElementById("highlightApproved").innerHTML = approved.length ? approved.map(h => `
     <div class="highlight-post">
       <div class="highlight-post-head">
-        <span class="highlight-author">${h.authorName}</span>
+        <span class="highlight-author">${esc(h.authorName)}</span>
         <span class="highlight-time">${fmtWhen(h.createdAt)}</span>
       </div>
-      <div class="highlight-text">${h.description}</div>
+      <div class="highlight-text">${esc(h.description)}</div>
       ${photoGallery(h)}
     </div>`).join("") : `<div class="empty-note">No highlight posted for this week yet</div>`;
 
@@ -794,8 +798,8 @@ function renderRaces() {
     <div class="highlight-post" data-id="${r.id}">
       <div class="highlight-post-head" style="justify-content:space-between;">
         <div>
-          <span class="highlight-author">${r.name}</span>
-          <span class="highlight-time">${fmtRaceDate(r.date)}${r.location ? " · " + r.location : ""}</span>
+          <span class="highlight-author">${esc(r.name)}</span>
+          <span class="highlight-time">${fmtRaceDate(r.date)}${r.location ? " · " + esc(r.location) : ""}</span>
         </div>
         ${isCoach() ? `<button class="week-nav-btn race-delete-btn" type="button">Delete</button>` : ""}
       </div>
@@ -804,7 +808,7 @@ function renderRaces() {
           <input type="checkbox" class="race-rsvp-input" ${imIn ? "checked" : ""}> I'm in
         </label>` : ""}
       ${attendees.length
-        ? `<div class="kudos-avatars">${attendees.map(a => avatarHtml(a.authorName)).join("")}<span style="margin-inline-start:10px; font-size:12px; color:var(--text-muted)">${attendees.map(a => a.authorName).join(", ")}</span></div>`
+        ? `<div class="kudos-avatars">${attendees.map(a => avatarHtml(a.authorName)).join("")}<span style="margin-inline-start:10px; font-size:12px; color:var(--text-muted)">${attendees.map(a => esc(a.authorName)).join(", ")}</span></div>`
         : `<div style="font-size:12px; color:var(--text-muted); margin-top:6px;">No one's confirmed yet</div>`}
     </div>`;
   }).join("") : `<div class="empty-note">No upcoming races${isCoach() ? " — click + Add race to add one" : ""}</div>`;
@@ -876,7 +880,7 @@ function renderRunnerFilters() {
   const el = document.getElementById("runnerFilters");
   el.innerHTML = `<button data-runner="" aria-pressed="${selectedRunnerId === null}">All</button>` +
     RUNNERS.map(r => `<button data-runner="${r.id}" aria-pressed="${selectedRunnerId === r.id}">
-      <span class="chip" style="background:${colorOf(r)}"></span>${r.name}</button>`).join("");
+      <span class="chip" style="background:${colorOf(r)}"></span>${esc(r.name)}</button>`).join("");
 }
 
 function renderTiles() {
@@ -920,14 +924,14 @@ function renderBars() {
   const el = document.getElementById("barChart");
   el.innerHTML = per.map(p => `
     <div class="bar-row" data-id="${p.r.id}">
-      <div class="bar-name"><span class="chip" style="background:${colorOf(p.r)}"></span>${p.r.name}</div>
+      <div class="bar-name"><span class="chip" style="background:${colorOf(p.r)}"></span>${esc(p.r.name)}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${(p.kmSum / max * 100).toFixed(1)}%;background:${colorOf(p.r)}"></div></div>
       <div class="bar-val">${fmtKm(p.kmSum)} km</div>
     </div>`).join("");
   el.querySelectorAll(".bar-row").forEach(row => {
     const p = per.find(x => x.r.id === row.dataset.id);
     row.addEventListener("mousemove", e => showTip(
-      `<div class="t-title">${p.r.name}</div>
+      `<div class="t-title">${esc(p.r.name)}</div>
        <div class="t-row">Runs<b>${p.n}</b></div>
        <div class="t-row">Distance<b>${fmtKm(p.kmSum)} km</b></div>
        <div class="t-row">Avg pace<b>${fmtPace(p.pace)} min/km</b></div>`, e.clientX, e.clientY));
@@ -963,7 +967,7 @@ function renderSleep() {
   const max = Math.max(...per.map(p => p.avgHours || 0), 1);
   el.innerHTML = per.map(p => `
     <div class="bar-row">
-      <div class="bar-name"><span class="chip" style="background:${colorOf(p.r)}"></span>${p.r.name}</div>
+      <div class="bar-name"><span class="chip" style="background:${colorOf(p.r)}"></span>${esc(p.r.name)}</div>
       <div class="bar-track">${p.avgHours != null ? `<div class="bar-fill" style="width:${(p.avgHours / max * 100).toFixed(1)}%;background:${colorOf(p.r)}"></div>` : ""}</div>
       <div class="bar-val">${p.avgHours != null ? fmtHoursMin(p.avgHours) : "No data"}</div>
     </div>`).join("");
@@ -1053,7 +1057,7 @@ function renderPlan() {
     return `<div class="plan-row${isToday ? " today" : ""}${isRest ? " plan-rest" : ""}">
       <div class="plan-day">${WEEKDAY_EN[i]}</div>
       <div class="plan-date">${fmtDateEn(d)}</div>
-      <div class="plan-text">${text || "—"}</div>
+      <div class="plan-text">${esc(text) || "—"}</div>
     </div>`;
   }).join("");
 }
@@ -1090,7 +1094,7 @@ function renderSharedWorkoutTool(el, weekStartStr, start) {
       placeholder="e.g. Hill + tempo session, 15-16km..."></textarea>
     <div style="margin-top:10px; display:flex; gap:14px; flex-wrap:wrap;">
       ${RUNNERS.map(r => `<label style="display:flex; align-items:center; gap:5px; font-size:13px; cursor:pointer;">
-        <input type="checkbox" class="shared-runner-check" value="${r.id}" checked>${r.name}</label>`).join("")}
+        <input type="checkbox" class="shared-runner-check" value="${r.id}" checked>${esc(r.name)}</label>`).join("")}
     </div>
     <div class="plan-edit-actions">
       <button id="sharedWorkoutApply" class="week-nav-btn" type="button">Apply</button>
@@ -1205,28 +1209,28 @@ function renderFeed() {
   el.innerHTML = acts.map(a => {
     const r = runnerById(a.ownerId);
     const pace = a.durationInSeconds / km(a);
-    return `<div class="feed-item" data-activity-id="${a.activityId}">
-      <div class="avatar" style="background:${colorOf(r)}">${(r.name[0] || "?").toUpperCase()}</div>
+    return `<div class="feed-item" data-activity-id="${esc(a.activityId)}">
+      <div class="avatar" style="background:${colorOf(r)}">${esc((r.name[0] || "?").toUpperCase())}</div>
       <div class="feed-main">
         <div class="feed-head">
-          <span class="feed-name">${r.name}</span>
+          <span class="feed-name">${esc(r.name)}</span>
           <span class="feed-time">${fmtDate(a.startTimeInSeconds)}</span>
         </div>
-        <div class="feed-title">${a.activityName || "Run"}</div>
+        <div class="feed-title">${esc(a.activityName) || "Run"}</div>
         <div class="feed-stats">
           <span><b>${fmtKm(km(a))}</b> km</span>
           <span><b>${fmtDur(a.durationInSeconds)}</b></span>
           <span><b>${fmtPace(pace)}</b> min/km</span>
           <span><b>${a.averageHeartRateInBeatsPerMinute ?? "-"}</b> bpm</span>
-          <span class="device">${a.deviceName}</span>
+          <span class="device">${esc(a.deviceName)}</span>
         </div>
-        <div class="photo-wrap" data-photo-wrap-for="${a.activityId}" style="display:none">
+        <div class="photo-wrap" data-photo-wrap-for="${esc(a.activityId)}" style="display:none">
           <button class="photo-toggle-btn" type="button">Minimize</button>
-          <img class="feed-photo" data-photo-for="${a.activityId}">
+          <img class="feed-photo" data-photo-for="${esc(a.activityId)}">
         </div>
         <div class="feed-engagement">
-          <span data-kudos-for="${a.activityId}">👍 –</span>
-          <span data-comments-for="${a.activityId}">💬 –</span>
+          <span data-kudos-for="${esc(a.activityId)}">👍 –</span>
+          <span data-comments-for="${esc(a.activityId)}">💬 –</span>
         </div>
       </div>
     </div>`;
@@ -1377,8 +1381,8 @@ async function openDetail(activityId) {
   sheet.innerHTML = `
     <div class="sheet-head">
       <div>
-        <h3>${a ? a.activityName : "Run"}</h3>
-        <div class="sheet-sub">${r ? r.name + " · " : ""}${a ? fmtDate(a.startTimeInSeconds) : ""}</div>
+        <h3>${a ? esc(a.activityName) : "Run"}</h3>
+        <div class="sheet-sub">${r ? esc(r.name) + " · " : ""}${a ? fmtDate(a.startTimeInSeconds) : ""}</div>
       </div>
       <button class="close-btn" id="closeSheet">Close ✕</button>
     </div>
@@ -1466,7 +1470,7 @@ async function loadEngagement(activityId) {
   setHtml(`
     <div class="section-title">Photos</div>
     ${photos.length ? `<div class="photo-gallery">${photos.map(p => `
-      <div class="photo-wrap"><button class="photo-toggle-btn" type="button">Minimize</button><img src="${p.url}" alt="Photo by ${p.authorName}"></div>`).join("")}</div>` : ""}
+      <div class="photo-wrap"><button class="photo-toggle-btn" type="button">Minimize</button><img src="${esc(safeUrl(p.url))}" alt="Photo by ${esc(p.authorName)}"></div>`).join("")}</div>` : ""}
     <label class="add-photo-btn">📷 Add photo<input type="file" id="photoInput" accept="image/*" style="display:none"></label>
     <div id="photoStatus" style="font-size:11px; color:var(--text-muted); margin-top:4px;"></div>
 
@@ -1475,17 +1479,17 @@ async function loadEngagement(activityId) {
     ${likerNames.length ? `
       <div class="kudos-avatars">
         ${likerNames.slice(0, 8).map(n => avatarHtml(n === "You" ? me : n)).join("")}
-        <span style="margin-inline-start:10px; font-size:12px; color:var(--text-muted)">${likerNames.join(", ")}</span>
+        <span style="margin-inline-start:10px; font-size:12px; color:var(--text-muted)">${likerNames.map(esc).join(", ")}</span>
       </div>` : ""}
     <div id="commentsList" style="margin-top:14px;">${comments.length ? comments.map(c => `
       <div class="comment-item">
         ${avatarHtml(c.authorName)}
         <div class="comment-body">
           <div class="comment-header">
-            <span class="comment-author">${c.authorName}</span>
+            <span class="comment-author">${esc(c.authorName)}</span>
             <span class="comment-time">${new Date(c.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
           </div>
-          <div class="comment-text">${c.text}</div>
+          <div class="comment-text">${esc(c.text)}</div>
         </div>
       </div>`).join("") : `<div class="empty-note">No comments yet — be the first</div>`}</div>
     <div class="comment-input-row">
@@ -1807,7 +1811,7 @@ function colorFromName(name) {
   return `hsl(${Math.abs(hash) % 360}, 55%, 45%)`;
 }
 function avatarHtml(name) {
-  return `<div class="avatar" style="background:${colorFromName(name)}">${(name[0] || "?").toUpperCase()}</div>`;
+  return `<div class="avatar" style="background:${colorFromName(name)}">${esc((name[0] || "?").toUpperCase())}</div>`;
 }
 
 /* ---------- Push notifications (supabase/push_subscriptions.sql + functions/notify-push) ---------- */
