@@ -10,7 +10,6 @@ self.addEventListener("push", event => {
   event.waitUntil(self.registration.showNotification(data.title || "Eyal's Angels 👼", {
     body: data.body || "",
     icon: "/icons/icon-192.png",
-    badge: "/icons/icon-192.png",
     tag: data.tag,
     data: { url: data.url || "/" },
   }));
