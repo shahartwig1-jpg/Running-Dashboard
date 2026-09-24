@@ -124,11 +124,10 @@ Deno.serve(async req => {
     const subs = (await subscriptionsFor(recipients)).filter(s => body.type === "test" || s.email.toLowerCase() !== actorEmail);
     if (subs.length === 0) return json({ sent: 0, note: "no subscribed devices" });
 
-    webpush.setVapidDetails(
-      Deno.env.get("VAPID_SUBJECT")!,
-      Deno.env.get("VAPID_PUBLIC_KEY")!,
-      Deno.env.get("VAPID_PRIVATE_KEY")!,
-    );
+    // Secrets pasted from a text file often carry an invisible trailing newline/space (or
+    // quotes), which web-push rejects — strip them so a sloppy paste can't break sending.
+    const clean = (name: string) => (Deno.env.get(name) ?? "").trim().replace(/^["']|["']$/g, "").replace(/=+$/, "");
+    webpush.setVapidDetails(clean("VAPID_SUBJECT"), clean("VAPID_PUBLIC_KEY"), clean("VAPID_PRIVATE_KEY"));
     const payload = JSON.stringify({ title: "Eyal's Angels 👼", body: message.body, tag: message.tag, url: SITE_URL });
     let sent = 0, removed = 0;
     await Promise.all(subs.map(async s => {
