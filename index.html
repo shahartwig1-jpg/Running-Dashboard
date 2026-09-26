@@ -1403,7 +1403,7 @@ function loadStickerLogo() {
     const img = new Image();
     img.onload = () => resolve(img);
     img.onerror = () => { stickerLogoPromise = null; reject(new Error("logo failed to load")); };
-    img.src = "/icons/logo-sticker.png"; // white artwork on a transparent background
+    img.src = "/icons/logo-angel.png"; // white angel artwork on a transparent background (no wording — the name is drawn as text below)
   });
   return stickerLogoPromise;
 }
@@ -1411,14 +1411,19 @@ function loadStickerLogo() {
 async function renderSticker(a) {
   const logo = await loadStickerLogo();
   const FONT = '"Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif';
-  const W = 860, PAD = 44, LOGO_H = 540, GAP = 44, VALUE_H = 96, LABEL_DROP = 54;
-  const logoW = LOGO_H * logo.naturalWidth / logo.naturalHeight;
+  const SERIF = '"Times New Roman", "David", Georgia, serif';
+  const W = 860, PAD = 44, ANGEL_H = 440, NAME_GAP = 14, NAME_H = 118, GAP = 40, VALUE_H = 96, LABEL_DROP = 54;
+  const logoW = ANGEL_H * logo.naturalWidth / logo.naturalHeight;
   const canvas = document.createElement("canvas");
   canvas.width = W;
-  canvas.height = PAD + LOGO_H + GAP + VALUE_H + LABEL_DROP + PAD;
+  canvas.height = PAD + ANGEL_H + NAME_GAP + NAME_H + GAP + VALUE_H + LABEL_DROP + PAD;
   const ctx = canvas.getContext("2d"); // never filled, so the background stays transparent
   ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 12; ctx.shadowOffsetY = 3; // keeps white readable on bright photos
-  ctx.drawImage(logo, (W - logoW) / 2, PAD, logoW, LOGO_H);
+  ctx.drawImage(logo, (W - logoW) / 2, PAD, logoW, ANGEL_H);
+  ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.direction = "rtl";
+  ctx.font = `600 112px ${SERIF}`;
+  ctx.fillText("מלאכיות", W / 2, PAD + ANGEL_H + NAME_GAP + 96);
+  ctx.direction = "ltr";
 
   const stats = [
     { value: km(a).toFixed(2), unit: "km", label: "DISTANCE" },
@@ -1434,7 +1439,7 @@ async function renderSticker(a) {
   let size = 84; // one common size for all three so they look consistent; shrinks if e.g. 1:32:29 doesn't fit
   while (size > 36 && stats.some(s => widths(s, size).reduce((x, y) => x + y) > colW - 16)) size -= 4;
 
-  const baseY = PAD + LOGO_H + GAP + VALUE_H;
+  const baseY = PAD + ANGEL_H + NAME_GAP + NAME_H + GAP + VALUE_H;
   ctx.fillStyle = "#fff";
   stats.forEach((s, i) => {
     const cx = PAD + colW * i + colW / 2;
