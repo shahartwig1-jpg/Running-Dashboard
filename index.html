@@ -1424,12 +1424,11 @@ function loadStickerLogo() {
 
 async function renderSticker(a) {
   const logo = await loadStickerLogo();
-  // Sporty look: heavy italic (condensed where the device has it), numbers in a white->ice gradient,
-  // units in the accent blue at the SAME size as the number, small tracked-out labels.
+  // Sporty look: heavy italic (condensed where the device has it), all white, big numbers with the
+  // units at the SAME size as the number, small tracked-out labels.
   const DISPLAY = '"Avenir Next Condensed", "Bahnschrift", "Arial Narrow", "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif';
   const SERIF = '"Times New Roman", "David", Georgia, serif';
-  const ACCENT = "#6db3ff", LABEL = "#a9d0ff";
-  const PAD = 40, ANGEL_H = 300, NAME_GAP = 8, NAME_SIZE = 76, NAME_H = 90, GAP = 34, SIZE = 80, VALUE_H = 88, LABEL_DROP = 52;
+  const PAD = 40, ANGEL_H = 300, NAME_GAP = 8, NAME_SIZE = 76, NAME_H = 90, GAP = 34, SIZE = 112, VALUE_H = 118, LABEL_DROP = 58;
 
   const stats = [
     { value: km(a).toFixed(2), unit: "km", label: "DISTANCE" },
@@ -1441,7 +1440,7 @@ async function renderSticker(a) {
   measure.font = `italic 800 ${SIZE}px ${DISPLAY}`;
   const widths = st => [measure.measureText(st.value).width, measure.measureText(unitText(st)).width];
   // The sticker is exactly as wide as its content (no empty transparent margins to fight with when placing it).
-  const colW = Math.ceil(Math.max(...stats.map(st => widths(st).reduce((x, y) => x + y))) + 52);
+  const colW = Math.ceil(Math.max(...stats.map(st => widths(st).reduce((x, y) => x + y))) + 44);
   const W = colW * 3 + PAD * 2;
   const logoW = ANGEL_H * logo.naturalWidth / logo.naturalHeight;
 
@@ -1462,18 +1461,15 @@ async function renderSticker(a) {
   ctx.strokeStyle = "rgba(255,255,255,0.38)"; ctx.lineWidth = 2; ctx.lineCap = "round";
   [1, 2].forEach(i => { const x = PAD + colW * i; ctx.beginPath(); ctx.moveTo(x, baseY - SIZE * 0.72); ctx.lineTo(x, baseY + LABEL_DROP - 8); ctx.stroke(); });
 
-  const grad = ctx.createLinearGradient(0, baseY - SIZE, 0, baseY);
-  grad.addColorStop(0, "#ffffff"); grad.addColorStop(1, "#d6e9ff");
   stats.forEach((st, i) => {
     const cx = PAD + colW * i + colW / 2;
     const [vw, uw] = widths(st);
     const x0 = cx - (vw + uw) / 2;
     ctx.textAlign = "left"; ctx.font = `italic 800 ${SIZE}px ${DISPLAY}`;
-    ctx.fillStyle = grad; ctx.fillText(st.value, x0, baseY);
-    if (st.unit) { ctx.fillStyle = ACCENT; ctx.fillText(unitText(st), x0 + vw, baseY); }
-    ctx.textAlign = "center"; ctx.fillStyle = LABEL; ctx.font = `700 26px ${DISPLAY}`;
-    if ("letterSpacing" in ctx) ctx.letterSpacing = "6px";
-    ctx.fillText(st.label, cx + 3, baseY + LABEL_DROP); // +3 re-centres text that has trailing letter-spacing
+    ctx.fillStyle = "#fff"; ctx.fillText(st.value + unitText(st), x0, baseY);
+    ctx.textAlign = "center"; ctx.fillStyle = "rgba(255,255,255,0.88)"; ctx.font = `700 30px ${DISPLAY}`;
+    if ("letterSpacing" in ctx) ctx.letterSpacing = "7px";
+    ctx.fillText(st.label, cx + 3.5, baseY + LABEL_DROP); // +3 re-centres text that has trailing letter-spacing
     if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
   });
   return canvas;
