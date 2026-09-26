@@ -267,7 +267,7 @@
   #overlay .section-title { font-size: 13px; font-weight: 600; margin: 18px 0 8px; }
   #overlay .chart-note { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
   #overlay .sticker-preview { background: linear-gradient(135deg, #1e3c64, #0b1220); border-radius: 12px; padding: 14px; text-align: center; }
-  #overlay .sticker-preview img { width: 92%; max-width: 480px; height: auto; display: inline-block; }
+  #overlay .sticker-preview img { width: auto; max-width: 100%; max-height: 460px; height: auto; display: inline-block; }
   #overlay .sticker-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
   #overlay .sticker-msg { font-size: 12px; color: var(--text-muted); }
   #overlay table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -1424,11 +1424,11 @@ function loadStickerLogo() {
 
 async function renderSticker(a) {
   const logo = await loadStickerLogo();
-  // Sporty look: heavy italic (condensed where the device has it), all white, big numbers with the
-  // units at the SAME size as the number, small tracked-out labels.
+  // Portrait layout (fits a story): angel + Hebrew name on top, then distance / pace / time stacked,
+  // each a big heavy-italic number with its unit at the same size and a small tracked-out label. All white.
   const DISPLAY = '"Avenir Next Condensed", "Bahnschrift", "Arial Narrow", "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif';
   const SERIF = '"Times New Roman", "David", Georgia, serif';
-  const PAD = 40, ANGEL_H = 300, NAME_GAP = 8, NAME_SIZE = 76, NAME_H = 90, GAP = 34, SIZE = 112, VALUE_H = 118, LABEL_DROP = 58;
+  const PAD = 40, ANGEL_H = 250, NAME_GAP = 6, NAME_SIZE = 68, NAME_H = 82, GAP = 30, SIZE = 124, LABEL_DROP = 44, BLOCK_GAP = 32;
 
   const stats = [
     { value: km(a).toFixed(2), unit: "km", label: "DISTANCE" },
@@ -1436,41 +1436,40 @@ async function renderSticker(a) {
     { value: fmtDur(a.durationInSeconds), unit: "", label: "TIME" },
   ];
   const unitText = st => !st.unit ? "" : (st.unit.startsWith("/") ? st.unit : " " + st.unit);
+  const line = st => st.value + unitText(st);
   const measure = document.createElement("canvas").getContext("2d");
   measure.font = `italic 800 ${SIZE}px ${DISPLAY}`;
-  const widths = st => [measure.measureText(st.value).width, measure.measureText(unitText(st)).width];
-  // The sticker is exactly as wide as its content (no empty transparent margins to fight with when placing it).
-  const colW = Math.ceil(Math.max(...stats.map(st => widths(st).reduce((x, y) => x + y))) + 44);
-  const W = colW * 3 + PAD * 2;
+  const maxW = Math.max(...stats.map(st => measure.measureText(line(st)).width));
   const logoW = ANGEL_H * logo.naturalWidth / logo.naturalHeight;
+  const W = Math.ceil(Math.max(maxW + PAD * 2, 540)); // as wide as its content, no empty transparent margins
+  const CAP = SIZE * 0.78, blockH = CAP + LABEL_DROP + 6;
+  const H = Math.ceil(PAD + ANGEL_H + NAME_GAP + NAME_H + GAP + stats.length * blockH + (stats.length - 1) * BLOCK_GAP + PAD);
 
   const canvas = document.createElement("canvas");
-  canvas.width = W;
-  canvas.height = PAD + ANGEL_H + NAME_GAP + NAME_H + GAP + VALUE_H + LABEL_DROP + PAD;
+  canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d"); // never filled, so the background stays transparent
-  ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 12; ctx.shadowOffsetY = 3; // keeps light text readable on bright photos
+  ctx.shadowColor = "rgba(0,0,0,0.5)"; ctx.shadowBlur = 12; ctx.shadowOffsetY = 3; // keeps white readable on bright photos
   ctx.drawImage(logo, (W - logoW) / 2, PAD, logoW, ANGEL_H);
   ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.direction = "rtl";
   ctx.font = `600 ${NAME_SIZE}px ${SERIF}`;
   ctx.fillText("מלאכיות", W / 2, PAD + ANGEL_H + NAME_GAP + NAME_SIZE * 0.88);
   ctx.direction = "ltr";
 
-  const baseY = PAD + ANGEL_H + NAME_GAP + NAME_H + GAP + VALUE_H;
-
-  // thin dividers between the three stats
-  ctx.strokeStyle = "rgba(255,255,255,0.38)"; ctx.lineWidth = 2; ctx.lineCap = "round";
-  [1, 2].forEach(i => { const x = PAD + colW * i; ctx.beginPath(); ctx.moveTo(x, baseY - SIZE * 0.72); ctx.lineTo(x, baseY + LABEL_DROP - 8); ctx.stroke(); });
-
+  let y = PAD + ANGEL_H + NAME_GAP + NAME_H + GAP;
   stats.forEach((st, i) => {
-    const cx = PAD + colW * i + colW / 2;
-    const [vw, uw] = widths(st);
-    const x0 = cx - (vw + uw) / 2;
-    ctx.textAlign = "left"; ctx.font = `italic 800 ${SIZE}px ${DISPLAY}`;
-    ctx.fillStyle = "#fff"; ctx.fillText(st.value + unitText(st), x0, baseY);
-    ctx.textAlign = "center"; ctx.fillStyle = "rgba(255,255,255,0.88)"; ctx.font = `700 30px ${DISPLAY}`;
+    const baseY = y + CAP;
+    ctx.textAlign = "center"; ctx.fillStyle = "#fff"; ctx.font = `italic 800 ${SIZE}px ${DISPLAY}`;
+    ctx.fillText(line(st), W / 2, baseY);
+    ctx.fillStyle = "rgba(255,255,255,0.88)"; ctx.font = `700 28px ${DISPLAY}`;
     if ("letterSpacing" in ctx) ctx.letterSpacing = "7px";
-    ctx.fillText(st.label, cx + 3.5, baseY + LABEL_DROP); // +3 re-centres text that has trailing letter-spacing
+    ctx.fillText(st.label, W / 2 + 3.5, baseY + LABEL_DROP); // +3.5 re-centres text that has trailing letter-spacing
     if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+    if (i < stats.length - 1) { // short divider between stats
+      const dy = y + blockH + BLOCK_GAP / 2;
+      ctx.strokeStyle = "rgba(255,255,255,0.38)"; ctx.lineWidth = 2; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(W / 2 - 46, dy); ctx.lineTo(W / 2 + 46, dy); ctx.stroke();
+    }
+    y += blockH + BLOCK_GAP;
   });
   return canvas;
 }
