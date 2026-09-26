@@ -350,9 +350,25 @@
   #loginScreen, #resetScreen {
     position: fixed; inset: 0; z-index: 30; display: none;
     align-items: center; justify-content: center;
-    background: var(--page);
+    background: radial-gradient(circle at 50% 30%, #0d2340, #020612 70%);
+    color: #fff;
   }
-  #loginScreen .card, #resetScreen .card { width: min(340px, 90vw); text-align: center; }
+  #loginScreen .card, #resetScreen .card { width: min(340px, 90vw); text-align: center; background: none; border: none; box-shadow: none; }
+  #loginScreen .brand-logo, #resetScreen .brand-logo { width: 150px; height: auto; display: block; margin: 0 auto 18px; }
+  #loginScreen h2, #resetScreen h2 { color: #fff; }
+  #loginScreen .sub, #resetScreen .sub { color: rgba(255,255,255,0.72) !important; }
+  #loginScreen input, #resetScreen input { background: rgba(255,255,255,0.08) !important; border-color: rgba(255,255,255,0.25) !important; color: #fff !important; }
+  #loginScreen input::placeholder, #resetScreen input::placeholder { color: rgba(255,255,255,0.5); }
+
+  /* Splash: the brand screen shown while the app loads, then faded out */
+  #splash {
+    position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 35%, #0d2340, #020612 70%);
+    transition: opacity 0.45s ease;
+  }
+  #splash.hide { opacity: 0; pointer-events: none; }
+  #splash img { width: min(46vw, 210px); height: auto; animation: splashIn 0.6s ease both; }
+  @keyframes splashIn { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: none; } }
   #loginScreen h2, #resetScreen h2 { font-size: 16px; margin-bottom: 4px; }
   #loginScreen .sub, #resetScreen .sub { margin-bottom: 16px; }
   #loginScreen input, #resetScreen input {
@@ -390,9 +406,10 @@
     if (saved) document.documentElement.setAttribute("data-theme", saved);
   })();
 </script>
+<div id="splash"><img src="/icons/logo-splash.png" alt="Eyal's Angels"></div>
 <div id="loginScreen">
   <div class="card">
-    <h2>🏃 Running Group Dashboard</h2>
+    <img class="brand-logo" src="/icons/logo-splash.png" alt="Eyal's Angels">
     <div class="sub" style="font-size:12px;color:var(--text-muted)">Login for group members only</div>
     <input type="email" id="loginEmail" placeholder="Email" autocomplete="username">
     <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password">
@@ -403,7 +420,8 @@
 
 <div id="resetScreen" style="display:none">
   <div class="card">
-    <h2>🏃 Set a new password</h2>
+    <img class="brand-logo" src="/icons/logo-splash.png" alt="Eyal's Angels">
+    <h2>Set a new password</h2>
     <div class="sub" style="font-size:12px;color:var(--text-muted)">You followed a password reset link — choose a new password below.</div>
     <input type="password" id="resetPassword" placeholder="New password" autocomplete="new-password">
     <input type="password" id="resetPasswordConfirm" placeholder="Confirm new password" autocomplete="new-password">
@@ -2144,12 +2162,25 @@ document.getElementById("themeToggle").addEventListener("click", () => {
 });
 updateThemeToggleIcon();
 
+// Fades the loading splash out once the first real screen (dashboard or login) is ready — but
+// keeps it up at least ~0.7s so it reads as intentional, and never longer than 8s if something stalls.
+const splashStart = Date.now();
+function hideSplash() {
+  const el = document.getElementById("splash");
+  if (!el || el.dataset.done) return;
+  el.dataset.done = "1";
+  setTimeout(() => { el.classList.add("hide"); setTimeout(() => el.remove(), 500); }, Math.max(0, 700 - (Date.now() - splashStart)));
+}
+setTimeout(hideSplash, 8000);
+
 renderAll();
 if (!checkForPasswordRecovery()) {
   loadReal().then(ok => {
     if (ok) { renderAll(); return; }
-    attemptLoginFlow();
-  });
+    return attemptLoginFlow();
+  }).finally(hideSplash);
+} else {
+  hideSplash();
 }
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { updateThemeToggleIcon(); renderAll(); });
 </script>
