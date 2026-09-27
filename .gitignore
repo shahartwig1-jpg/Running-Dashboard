@@ -17,3 +17,6 @@ dashboard.db-*
 # Push notification private signing key
 vapid-private.txt
 vapid-public.txt
+
+# Server-to-server secret for the sync job -> notify-push function
+sync-secret.txt

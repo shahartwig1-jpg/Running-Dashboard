@@ -27,22 +27,22 @@ create table if not exists weekly_highlight_photos (
 -- pending/rejected ones (that's how review/approval actually happens in the UI).
 create policy "authenticated can read approved highlights" on weekly_highlights
   for select to authenticated
-  using (status = 'approved' or (auth.jwt() ->> 'email') = 'shahartwig1@gmail.com');
+  using (status = 'approved' or (auth.jwt() ->> 'email') in ('shahartwig1@gmail.com', 'eyalshlomi8@gmail.com'));
 
 create policy "authenticated can submit highlights" on weekly_highlights
   for insert to authenticated with check (true);
 
 create policy "only coach can moderate highlights" on weekly_highlights
   for update to authenticated
-  using ((auth.jwt() ->> 'email') = 'shahartwig1@gmail.com')
-  with check ((auth.jwt() ->> 'email') = 'shahartwig1@gmail.com');
+  using ((auth.jwt() ->> 'email') in ('shahartwig1@gmail.com', 'eyalshlomi8@gmail.com'))
+  with check ((auth.jwt() ->> 'email') in ('shahartwig1@gmail.com', 'eyalshlomi8@gmail.com'));
 
 -- Photos inherit their parent highlight's visibility rule.
 create policy "authenticated can read photos of visible highlights" on weekly_highlight_photos
   for select to authenticated
   using (exists (
     select 1 from weekly_highlights h
-    where h.id = "highlightId" and (h.status = 'approved' or (auth.jwt() ->> 'email') = 'shahartwig1@gmail.com')
+    where h.id = "highlightId" and (h.status = 'approved' or (auth.jwt() ->> 'email') in ('shahartwig1@gmail.com', 'eyalshlomi8@gmail.com'))
   ));
 
 create policy "authenticated can add highlight photos" on weekly_highlight_photos

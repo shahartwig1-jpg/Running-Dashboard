@@ -18,15 +18,15 @@ create policy "authenticated can read races" on races
   for select to authenticated using (true);
 
 create policy "only coach can add races" on races
-  for insert to authenticated with check ((auth.jwt() ->> 'email') = 'shahartwig1@gmail.com');
+  for insert to authenticated with check ((auth.jwt() ->> 'email') in ('shahartwig1@gmail.com', 'eyalshlomi8@gmail.com'));
 
 create policy "only coach can update races" on races
   for update to authenticated
-  using ((auth.jwt() ->> 'email') = 'shahartwig1@gmail.com')
-  with check ((auth.jwt() ->> 'email') = 'shahartwig1@gmail.com');
+  using ((auth.jwt() ->> 'email') in ('shahartwig1@gmail.com', 'eyalshlomi8@gmail.com'))
+  with check ((auth.jwt() ->> 'email') in ('shahartwig1@gmail.com', 'eyalshlomi8@gmail.com'));
 
 create policy "only coach can delete races" on races
-  for delete to authenticated using ((auth.jwt() ->> 'email') = 'shahartwig1@gmail.com');
+  for delete to authenticated using ((auth.jwt() ->> 'email') in ('shahartwig1@gmail.com', 'eyalshlomi8@gmail.com'));
 
 create table if not exists race_rsvps (
   "raceId" bigint not null references races(id) on delete cascade,

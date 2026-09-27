@@ -8,9 +8,9 @@
 
 create policy "only coach can insert plan_history" on plan_history
   for insert to authenticated
-  with check ((auth.jwt() ->> 'email') = 'shahartwig1@gmail.com');
+  with check ((auth.jwt() ->> 'email') in ('shahartwig1@gmail.com', 'eyalshlomi8@gmail.com'));
 
 create policy "only coach can update plan_history" on plan_history
   for update to authenticated
-  using ((auth.jwt() ->> 'email') = 'shahartwig1@gmail.com')
-  with check ((auth.jwt() ->> 'email') = 'shahartwig1@gmail.com');
+  using ((auth.jwt() ->> 'email') in ('shahartwig1@gmail.com', 'eyalshlomi8@gmail.com'))
+  with check ((auth.jwt() ->> 'email') in ('shahartwig1@gmail.com', 'eyalshlomi8@gmail.com'));

@@ -1749,14 +1749,17 @@ const SESSION_KEY = "runDashboardSession";
 // Supabase RLS policy on plan_history (supabase/plan_edit_policy.sql), which checks this
 // same email server-side. Someone bypassing this client-side check would still get
 // rejected by Postgres on save.
-const COACH_EMAIL = "shahartwig1@gmail.com";
+const COACH_EMAILS = ["shahartwig1@gmail.com", "eyalshlomi8@gmail.com"];
 
 // localStorage (not sessionStorage) so the installed phone app stays logged in between
 // opens; the refresh token below renews the ~1h access token without asking for the password.
 function saveSession(s) { try { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch { } }
 function getSession() { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; } }
 function clearSession() { try { localStorage.removeItem(SESSION_KEY); } catch { } }
-function isCoach() { return getSession()?.user?.email === COACH_EMAIL; }
+function isCoach() {
+  const email = (getSession()?.user?.email || "").toLowerCase();
+  return COACH_EMAILS.some(c => c.toLowerCase() === email);
+}
 
 function sessionExpiresSoon(s) { return !s?.expires_at || s.expires_at * 1000 - Date.now() < 120000; }
 async function refreshSession() {

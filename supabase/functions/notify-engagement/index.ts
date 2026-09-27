@@ -11,7 +11,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
 const SITE_URL = "https://running-dashboard-eqyc.onrender.com";
-const COACH_EMAIL = "shahartwig1@gmail.com";
+const COACH_EMAILS = ["shahartwig1@gmail.com", "eyalshlomi8@gmail.com"];
 
 async function sb(path: string) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -38,13 +38,13 @@ Deno.serve(async req => {
     if (payload.type !== "INSERT") return new Response("ignored", { status: 200 });
 
     if (table === "weekly_highlights") {
-      await sendEmail(
-        COACH_EMAIL,
+      await Promise.all(COACH_EMAILS.map(email => sendEmail(
+        email,
         `📝 ${record.authorName} submitted a weekly highlight for approval`,
         `<p>${record.authorName} submitted a group highlight for the week of ${record.weekStart}:</p>
          <p>"${record.description}"</p>
          <p><a href="${SITE_URL}">Review it on the dashboard</a></p>`,
-      );
+      )));
       return new Response("sent", { status: 200 });
     }
     if (table !== "likes" && table !== "comments") {

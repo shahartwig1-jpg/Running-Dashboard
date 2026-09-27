@@ -1,5 +1,7 @@
-// Supabase Edge Function that sends push notifications to phones. The dashboard calls it
-// from the browser right after something happens (kudos, comment, plan saved, ...).
+// Supabase Edge Function that sends push notifications to phones. Most calls come from the
+// dashboard in the browser, right after something happens (kudos, comment, plan saved, ...).
+// The "new_run" type is different: it's called by the fetch-data.js sync job (GitHub Actions,
+// unattended, no browser/no logged-in user), authenticated with a shared secret instead.
 //
 // Deploy: Dashboard -> Edge Functions -> Deploy a new function -> name it exactly
 // `notify-push` -> paste this file -> in the function's settings turn "Verify JWT" OFF
@@ -8,7 +10,11 @@
 //
 // Secrets (Dashboard -> Edge Functions -> Secrets):
 //   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (e.g. mailto:you@example.com)
-//   COACH_EMAILS (optional, comma-separated; defaults to Shahar)
+//   COACH_EMAILS (optional, comma-separated; who gets coach-only alerts -- defaults to Shahar)
+//   RUN_COMPLETE_EMAILS (optional, comma-separated; who gets notified when someone finishes a
+//     run -- kept separate from COACH_EMAILS on purpose, so this can be just Eyal)
+//   SYNC_SECRET -- shared with the fetch-data.js GitHub Action; lets it call this function with
+//     no logged-in user (it runs on a schedule, unattended)
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
 
 import webpush from "npm:web-push@3.6.7";
@@ -17,11 +23,14 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const COACH_EMAILS = (Deno.env.get("COACH_EMAILS") ?? "shahartwig1@gmail.com")
   .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+const RUN_COMPLETE_EMAILS = (Deno.env.get("RUN_COMPLETE_EMAILS") ?? "eyalshlomi8@gmail.com")
+  .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+const SYNC_SECRET = Deno.env.get("SYNC_SECRET") ?? "";
 const SITE_URL = "https://running-dashboard-eqyc.onrender.com";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-sync-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 const json = (body: unknown, status = 200) =>
@@ -57,22 +66,93 @@ async function subscriptionsFor(emails: string[] | "all") {
     { endpoint: string; email: string; p256dh: string; auth: string }[];
 }
 
-// runner id -> login email, via the runner_emails table (empty until runners have logins).
-async function emailsForRunners(ownerIds: string[]) {
-  if (ownerIds.length === 0) return [];
-  const rows = await sb(`runner_emails?select=email&ownerId=${inList(ownerIds)}`).catch(() => []);
-  return (rows as { email: string }[]).map(r => r.email.toLowerCase());
+// runner id -> login email, via the runner_emails table (empty until a runner has a login).
+async function emailMapForRunners(ownerIds: string[]) {
+  const map: Record<string, string> = {};
+  if (ownerIds.length === 0) return map;
+  const rows = await sb(`runner_emails?select=ownerId,email&ownerId=${inList(ownerIds)}`).catch(() => []) as
+    { ownerId: string; email: string }[];
+  for (const r of rows) map[r.ownerId] = r.email.toLowerCase();
+  return map;
+}
+
+// Secrets pasted from a text file often carry an invisible trailing newline/space (or quotes),
+// which web-push rejects — strip them so a sloppy paste can't break sending.
+const cleanSecret = (name: string) => (Deno.env.get(name) ?? "").trim().replace(/^["']|["']$/g, "").replace(/=+$/, "");
+let vapidReady = false;
+function ensureVapid() {
+  if (vapidReady) return;
+  webpush.setVapidDetails(cleanSecret("VAPID_SUBJECT"), cleanSecret("VAPID_PUBLIC_KEY"), cleanSecret("VAPID_PRIVATE_KEY"));
+  vapidReady = true;
+}
+
+async function sendToSubs(subs: { endpoint: string; email: string; p256dh: string; auth: string }[], payload: string) {
+  ensureVapid();
+  let sent = 0, removed = 0;
+  await Promise.all(subs.map(async s => {
+    try {
+      await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 86400 });
+      sent++;
+    } catch (e: any) {
+      // 404/410 = that phone unsubscribed or uninstalled: forget the dead address.
+      if (e.statusCode === 404 || e.statusCode === 410) {
+        await sb(`push_subscriptions?endpoint=eq.${encodeURIComponent(s.endpoint)}`, { method: "DELETE" }).catch(() => {});
+        removed++;
+      } else {
+        console.error("push failed", e.statusCode, e.body);
+      }
+    }
+  }));
+  return { sent, removed };
+}
+
+function fmtDuration(sec: number) {
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.round(sec % 60);
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
 }
 
 Deno.serve(async req => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
+    const body = await req.json();
+
+    // The sync job (fetch-data.js, on a GitHub Actions schedule) has no logged-in user to send
+    // a token for — it proves itself with a shared secret instead.
+    if (body.type === "new_run") {
+      if (!SYNC_SECRET || req.headers.get("x-sync-secret") !== SYNC_SECRET) return json({ error: "unauthorized" }, 401);
+      const runs = Array.isArray(body.runs) ? body.runs : [];
+      if (runs.length === 0 || RUN_COMPLETE_EMAILS.length === 0) return json({ sent: 0, note: "nothing to send" });
+
+      const ownerIds = [...new Set(runs.map((r: any) => String(r.ownerId)))];
+      const ownerEmailById = await emailMapForRunners(ownerIds);
+      const subs = await subscriptionsFor(RUN_COMPLETE_EMAILS);
+      if (subs.length === 0) return json({ sent: 0, note: "no subscribed devices" });
+
+      let sent = 0, removed = 0;
+      for (const r of runs) {
+        // Don't tell someone about their own run, in the rare case a recipient is also a runner.
+        const targetSubs = subs.filter(s => s.email.toLowerCase() !== ownerEmailById[String(r.ownerId)]);
+        if (targetSubs.length === 0) continue;
+        const km = r.distanceInMeters ? (r.distanceInMeters / 1000).toFixed(1) : null;
+        const time = r.durationInSeconds ? fmtDuration(r.durationInSeconds) : null;
+        const stats = [km ? `${km} km` : null, time].filter(Boolean).join(" in ");
+        const payload = JSON.stringify({
+          title: "Eyal's Angels 👼",
+          body: `🏃 ${clip(r.ownerName, 30) || "Someone"} finished a run${stats ? `: ${stats}` : ""}`,
+          tag: `run-${r.activityId}`,
+          url: SITE_URL,
+        });
+        const result = await sendToSubs(targetSubs, payload);
+        sent += result.sent; removed += result.removed;
+      }
+      return json({ sent, removed });
+    }
+
     const user = await getUser((req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, ""));
     if (!user?.email) return json({ error: "not logged in" }, 401);
     const actorEmail = String(user.email).toLowerCase();
     const actor = actorEmail.split("@")[0];
     const isCoach = COACH_EMAILS.includes(actorEmail);
-    const body = await req.json();
 
     let recipients: string[] | "all";
     let message: { body: string; tag: string };
@@ -86,7 +166,7 @@ Deno.serve(async req => {
       case "comment": {
         const acts = await sb(`activities?activityId=eq.${encodeURIComponent(String(body.activityId))}&select=ownerId,activityName`);
         if (!acts?.[0]) return json({ sent: 0, note: "unknown activity" });
-        recipients = await emailsForRunners([acts[0].ownerId]);
+        recipients = Object.values(await emailMapForRunners([acts[0].ownerId]));
         const run = clip(acts[0].activityName, 60) || "your run";
         message = body.type === "like"
           ? { body: `👍 ${actor} gave kudos on "${run}"`, tag: `like-${body.activityId}` }
@@ -112,7 +192,7 @@ Deno.serve(async req => {
       case "plan": {
         if (!isCoach) return json({ error: "coach only" }, 403);
         const ids = (Array.isArray(body.ownerIds) ? body.ownerIds : []).map((x: unknown) => clip(x, 40)).filter(Boolean);
-        recipients = await emailsForRunners(ids);
+        recipients = Object.values(await emailMapForRunners(ids));
         message = { body: "🗓️ Your training plan was updated", tag: "plan" };
         break;
       }
@@ -124,27 +204,9 @@ Deno.serve(async req => {
     const subs = (await subscriptionsFor(recipients)).filter(s => body.type === "test" || s.email.toLowerCase() !== actorEmail);
     if (subs.length === 0) return json({ sent: 0, note: "no subscribed devices" });
 
-    // Secrets pasted from a text file often carry an invisible trailing newline/space (or
-    // quotes), which web-push rejects — strip them so a sloppy paste can't break sending.
-    const clean = (name: string) => (Deno.env.get(name) ?? "").trim().replace(/^["']|["']$/g, "").replace(/=+$/, "");
-    webpush.setVapidDetails(clean("VAPID_SUBJECT"), clean("VAPID_PUBLIC_KEY"), clean("VAPID_PRIVATE_KEY"));
     const payload = JSON.stringify({ title: "Eyal's Angels 👼", body: message.body, tag: message.tag, url: SITE_URL });
-    let sent = 0, removed = 0;
-    await Promise.all(subs.map(async s => {
-      try {
-        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 86400 });
-        sent++;
-      } catch (e: any) {
-        // 404/410 = that phone unsubscribed or uninstalled: forget the dead address.
-        if (e.statusCode === 404 || e.statusCode === 410) {
-          await sb(`push_subscriptions?endpoint=eq.${encodeURIComponent(s.endpoint)}`, { method: "DELETE" }).catch(() => {});
-          removed++;
-        } else {
-          console.error("push failed", e.statusCode, e.body);
-        }
-      }
-    }));
-    return json({ sent, removed });
+    const result = await sendToSubs(subs, payload);
+    return json(result);
   } catch (e) {
     console.error(e);
     return json({ error: String(e) }, 500);
