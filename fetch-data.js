@@ -19,6 +19,8 @@ const OUT_PATH = path.join(__dirname, "data.json");
 const DAYS_BACK = 70; // ~10 weeks, enough for the 8-week trend plus slack
 const DETAIL_DIR = path.join(__dirname, "details"); // per-activity laps + streams, one file each
 const STREAM_TYPES = "time,heartrate,distance,altitude,velocity_smooth";
+const SYNC_SECRET_PATH = path.join(__dirname, "sync-secret.txt"); // never committed — shared with the notify-push Edge Function
+const PUSH_FUNCTION = "rapid-task"; // the deployed notify-push function — Supabase auto-named it; see index.html's PUSH_FUNCTION comment
 
 function loadConfig() {
   // In CI (GitHub Actions) there is no config.json/key.txt on disk — the roster and
@@ -224,6 +226,30 @@ async function discover(cfg) {
   }
 }
 
+// Tells notify-push to alert whoever's set up for "run completed" alerts (Eyal, by default).
+// Best-effort: a sync must never fail because a notification couldn't be sent, and this does
+// nothing until SYNC_SECRET is set up (both here and as a matching Supabase Edge Function secret).
+async function notifyNewRuns(runs) {
+  const url = process.env.SUPABASE_URL ||
+    (fs.existsSync(path.join(__dirname, "supabase-url.txt")) ? fs.readFileSync(path.join(__dirname, "supabase-url.txt"), "utf8").trim() : "");
+  const secret = process.env.SYNC_SECRET ||
+    (fs.existsSync(SYNC_SECRET_PATH) ? fs.readFileSync(SYNC_SECRET_PATH, "utf8").trim() : "");
+  if (!url || !secret) {
+    console.log(`(skipping run-completed notification for ${runs.length} new run(s) — SYNC_SECRET not set up yet)`);
+    return;
+  }
+  try {
+    const res = await fetch(`${url.replace(/\/$/, "")}/functions/v1/${PUSH_FUNCTION}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-sync-secret": secret },
+      body: JSON.stringify({ type: "new_run", runs }),
+    });
+    console.log(`Run-completed notification: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
+  } catch (e) {
+    console.error("Run-completed notification failed:", e.message);
+  }
+}
+
 async function fetchAll(cfg) {
   const athletes = cfg.athletes && cfg.athletes.length ? cfg.athletes : [{ id: "0", name: "אני" }];
   const oldest = isoDaysAgo(DAYS_BACK), newest = today();
@@ -232,7 +258,7 @@ async function fetchAll(cfg) {
   // or no longer qualifies as a run), within that window, and remove them.
   const oldestEpoch = Math.floor(new Date(oldest).getTime() / 1000);
   const newestEpoch = Math.floor(new Date(newest).getTime() / 1000) + 86400; // include all of "today"
-  const runners = [], activities = [], sleep = [];
+  const runners = [], activities = [], sleep = [], newRuns = [];
   const keyByAthlete = {}; // needed again in fetchDetails, since laps/streams are per-activity calls
   const fetchedAt = new Date().toISOString();
 
@@ -258,6 +284,18 @@ async function fetchAll(cfg) {
         // (still 200, or the check itself fails) means "keep it" — never delete on
         // ambiguous evidence.
         const existingIds = await supa.getActivityIds(ath.id, oldestEpoch, newestEpoch);
+        // Runs genuinely new to Supabase (never synced before) — feeds the "someone finished a
+        // run" push notification sent once the whole sync is done. An already-known run being
+        // re-synced (e.g. its stats changed) doesn't count, even though it's still in `mine`.
+        const existingSet = new Set(existingIds.map(String));
+        for (const a of mine) {
+          if (!existingSet.has(String(a.activityId))) {
+            newRuns.push({
+              activityId: a.activityId, ownerId: a.ownerId, ownerName: ath.name || ath.id,
+              distanceInMeters: a.distanceInMeters, durationInSeconds: a.durationInSeconds,
+            });
+          }
+        }
         const freshIds = new Set(mine.map(a => String(a.activityId)));
         const candidateIds = existingIds.filter(id => !freshIds.has(String(id)));
         const confirmedGoneIds = [];
@@ -303,6 +341,7 @@ async function fetchAll(cfg) {
       sleepQuality: s.sleepQuality, avgSleepingHR: s.avgSleepingHR, fetchedAt,
     })));
   }
+  if (newRuns.length) await notifyNewRuns(newRuns);
 
   activities.sort((a, b) => b.startTimeInSeconds - a.startTimeInSeconds);
   // The weekly plan is now edited directly in the dashboard (writes straight to
