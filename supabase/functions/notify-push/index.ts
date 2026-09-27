@@ -25,7 +25,10 @@ const COACH_EMAILS = (Deno.env.get("COACH_EMAILS") ?? "shahartwig1@gmail.com,eya
   .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
 const RUN_COMPLETE_EMAILS = (Deno.env.get("RUN_COMPLETE_EMAILS") ?? "eyalshlomi8@gmail.com")
   .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
-const SYNC_SECRET = Deno.env.get("SYNC_SECRET") ?? "";
+// Secrets pasted from a text file often carry an invisible trailing newline/space (or quotes) —
+// strip them so a sloppy paste can't silently break a comparison or a signature.
+const cleanSecret = (name: string) => (Deno.env.get(name) ?? "").trim().replace(/^["']|["']$/g, "").replace(/=+$/, "");
+const SYNC_SECRET = cleanSecret("SYNC_SECRET");
 const SITE_URL = "https://running-dashboard-eqyc.onrender.com";
 
 const CORS = {
@@ -76,9 +79,6 @@ async function emailMapForRunners(ownerIds: string[]) {
   return map;
 }
 
-// Secrets pasted from a text file often carry an invisible trailing newline/space (or quotes),
-// which web-push rejects — strip them so a sloppy paste can't break sending.
-const cleanSecret = (name: string) => (Deno.env.get(name) ?? "").trim().replace(/^["']|["']$/g, "").replace(/=+$/, "");
 let vapidReady = false;
 function ensureVapid() {
   if (vapidReady) return;
