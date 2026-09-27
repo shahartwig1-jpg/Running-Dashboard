@@ -21,7 +21,7 @@ import webpush from "npm:web-push@3.6.7";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const COACH_EMAILS = (Deno.env.get("COACH_EMAILS") ?? "shahartwig1@gmail.com")
+const COACH_EMAILS = (Deno.env.get("COACH_EMAILS") ?? "shahartwig1@gmail.com,eyalshlomi8@gmail.com")
   .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
 const RUN_COMPLETE_EMAILS = (Deno.env.get("RUN_COMPLETE_EMAILS") ?? "eyalshlomi8@gmail.com")
   .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
