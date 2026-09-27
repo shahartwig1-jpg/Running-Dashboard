@@ -106,11 +106,6 @@ async function sendToSubs(subs: { endpoint: string; email: string; p256dh: strin
   return { sent, removed };
 }
 
-function fmtDuration(sec: number) {
-  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.round(sec % 60);
-  return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
-}
-
 Deno.serve(async req => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
@@ -133,12 +128,8 @@ Deno.serve(async req => {
         // Don't tell someone about their own run, in the rare case a recipient is also a runner.
         const targetSubs = subs.filter(s => s.email.toLowerCase() !== ownerEmailById[String(r.ownerId)]);
         if (targetSubs.length === 0) continue;
-        const km = r.distanceInMeters ? (r.distanceInMeters / 1000).toFixed(1) : null;
-        const time = r.durationInSeconds ? fmtDuration(r.durationInSeconds) : null;
-        const stats = [km ? `${km} km` : null, time].filter(Boolean).join(" in ");
         const payload = JSON.stringify({
-          title: "Eyal's Angels 👼",
-          body: `🏃 ${clip(r.ownerName, 30) || "Someone"} finished a run${stats ? `: ${stats}` : ""}`,
+          title: `🏃 ${clip(r.ownerName, 30) || "Someone"} completed a run`,
           tag: `run-${r.activityId}`,
           url: SITE_URL,
         });
