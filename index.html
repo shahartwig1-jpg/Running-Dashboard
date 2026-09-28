@@ -528,6 +528,7 @@
     <h2>Recent activities</h2>
     <div class="sub" id="tableSub"></div>
     <div id="feedList"></div>
+    <button id="feedLoadMore" class="week-nav-btn" type="button" style="display:none; margin-top:10px;">Load previous week</button>
   </div>
 
   <footer>
@@ -681,6 +682,10 @@ let selectedRunnerId = null; // null = everyone
 // same weekBounds()/thisWeekActs() — one nav control for "the general weekly runs" and
 // "the personal" (per-runner) view alike, so a coach can page both back in lockstep.
 let weekOffset = 0;
+// How many weeks back "Recent activities" shows for the selected runner, growing one week
+// at a time via the "Load previous week" button — deliberately separate from weekOffset so
+// scrolling a runner's history doesn't drag the weekly charts/highlights along with it.
+let feedWeeksLoaded = 1;
 
 function inRange(a) {
   return a.startTimeInSeconds * 1000 >= TODAY.getTime() - rangeDays * DAY;
@@ -1230,21 +1235,29 @@ function renderWeekday() {
 }
 
 function renderFeed() {
-  // For a single runner, page through their full history by calendar week (via the
-  // Previous/Next week buttons) instead of the rolling 7/30-day window — that window is
-  // too short to browse someone's past weeks, which is the whole point of picking a runner.
+  // For a single runner, "Recent activities" shows their full history in growing weekly
+  // chunks (via "Load previous week"), instead of being capped by the rolling 7/30-day
+  // window — that window is too short to browse someone's past weeks.
   const bySingleRunner = selectedRunnerId !== null;
-  const all = bySingleRunner ? thisWeekActs() : scoped();
-  const acts = bySingleRunner ? all : all.slice(0, 14);
+  const loadMoreBtn = document.getElementById("feedLoadMore");
+  let all, acts;
   if (bySingleRunner) {
-    const { start, end } = weekBounds();
+    const end = weekStart(TODAY).getTime() + 7 * DAY; // end of this week
+    const oldestLoadable = TODAY.getTime() - 90 * DAY; // matches the server-side fetch cutoff
+    const start = Math.max(weekStart(TODAY).getTime() - (feedWeeksLoaded - 1) * 7 * DAY, oldestLoadable);
+    all = ACTIVITIES.filter(a => matchesRunner(a) && a.startTimeInSeconds * 1000 >= start && a.startTimeInSeconds * 1000 < end)
+      .sort((a, b) => b.startTimeInSeconds - a.startTimeInSeconds);
+    acts = all;
     document.getElementById("tableSub").textContent =
-      `${fmtDateEn(start)} – ${fmtDateEn(end)}` + (weekOffset === 0 ? " (this week)" : "") +
-      " · " + runnerById(selectedRunnerId).name;
+      `${fmtDateEn(new Date(start))} – ${fmtDateEn(new Date(end - DAY))}` + " · " + runnerById(selectedRunnerId).name;
+    loadMoreBtn.style.display = start > oldestLoadable ? "" : "none";
   } else {
+    all = scoped();
+    acts = all.slice(0, 14);
     document.getElementById("tableSub").textContent =
       (rangeDays === 7 ? "Last 7 days" : "Last 30 days") +
       (all.length > 14 ? " · last 14" : "");
+    loadMoreBtn.style.display = "none";
   }
 
   const el = document.getElementById("feedList");
@@ -1709,6 +1722,7 @@ document.getElementById("runnerFilters").addEventListener("click", e => {
   selectedRunnerId = btn.dataset.runner || null;
   planWeekOffset = 0;
   planEditing = false;
+  feedWeeksLoaded = 1;
   renderAll();
 });
 
@@ -1718,12 +1732,17 @@ document.getElementById("planNext").addEventListener("click", () => { planWeekOf
 
 document.getElementById("weekPrev").addEventListener("click", () => {
   weekOffset--;
-  renderWeekNav(); renderTiles(); renderBars(); renderWeekday(); renderHighlights(); renderFeed();
+  renderWeekNav(); renderTiles(); renderBars(); renderWeekday(); renderHighlights();
 });
 document.getElementById("weekNext").addEventListener("click", () => {
   if (weekOffset >= 0) return; // can't browse into weeks that haven't happened yet
   weekOffset++;
-  renderWeekNav(); renderTiles(); renderBars(); renderWeekday(); renderHighlights(); renderFeed();
+  renderWeekNav(); renderTiles(); renderBars(); renderWeekday(); renderHighlights();
+});
+
+document.getElementById("feedLoadMore").addEventListener("click", () => {
+  feedWeeksLoaded++;
+  renderFeed();
 });
 
 /* Real data, if fetch-data.js has produced any; otherwise the demo above stands. */
