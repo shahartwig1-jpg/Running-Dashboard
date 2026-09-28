@@ -1230,12 +1230,22 @@ function renderWeekday() {
 }
 
 function renderFeed() {
-  const all = scoped();
-  const acts = all.slice(0, 14);
-  document.getElementById("tableSub").textContent =
-    (rangeDays === 7 ? "Last 7 days" : "Last 30 days") +
-    (selectedRunnerId !== null ? " · " + runnerById(selectedRunnerId).name : "") +
-    (all.length > 14 ? " · last 14" : "");
+  // For a single runner, page through their full history by calendar week (via the
+  // Previous/Next week buttons) instead of the rolling 7/30-day window — that window is
+  // too short to browse someone's past weeks, which is the whole point of picking a runner.
+  const bySingleRunner = selectedRunnerId !== null;
+  const all = bySingleRunner ? thisWeekActs() : scoped();
+  const acts = bySingleRunner ? all : all.slice(0, 14);
+  if (bySingleRunner) {
+    const { start, end } = weekBounds();
+    document.getElementById("tableSub").textContent =
+      `${fmtDateEn(start)} – ${fmtDateEn(end)}` + (weekOffset === 0 ? " (this week)" : "") +
+      " · " + runnerById(selectedRunnerId).name;
+  } else {
+    document.getElementById("tableSub").textContent =
+      (rangeDays === 7 ? "Last 7 days" : "Last 30 days") +
+      (all.length > 14 ? " · last 14" : "");
+  }
 
   const el = document.getElementById("feedList");
   if (!acts.length) {
@@ -1708,12 +1718,12 @@ document.getElementById("planNext").addEventListener("click", () => { planWeekOf
 
 document.getElementById("weekPrev").addEventListener("click", () => {
   weekOffset--;
-  renderWeekNav(); renderTiles(); renderBars(); renderWeekday(); renderHighlights();
+  renderWeekNav(); renderTiles(); renderBars(); renderWeekday(); renderHighlights(); renderFeed();
 });
 document.getElementById("weekNext").addEventListener("click", () => {
   if (weekOffset >= 0) return; // can't browse into weeks that haven't happened yet
   weekOffset++;
-  renderWeekNav(); renderTiles(); renderBars(); renderWeekday(); renderHighlights();
+  renderWeekNav(); renderTiles(); renderBars(); renderWeekday(); renderHighlights(); renderFeed();
 });
 
 /* Real data, if fetch-data.js has produced any; otherwise the demo above stands. */
