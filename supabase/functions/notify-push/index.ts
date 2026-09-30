@@ -10,7 +10,8 @@
 //
 // Secrets (Dashboard -> Edge Functions -> Secrets):
 //   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (e.g. mailto:you@example.com)
-//   COACH_EMAILS (optional, comma-separated; who gets coach-only alerts -- defaults to Shahar)
+//   COACH_EMAILS (optional, comma-separated; fallback for who gets coach-only alerts, only
+//     used if the `roles` table (supabase/roles.sql) is empty/missing -- defaults to Shahar)
 //   RUN_COMPLETE_EMAILS (optional, comma-separated; who gets notified when someone finishes a
 //     run -- kept separate from COACH_EMAILS on purpose, so this can be just Eyal)
 //   SYNC_SECRET -- shared with the fetch-data.js GitHub Action; lets it call this function with
@@ -21,7 +22,7 @@ import webpush from "npm:web-push@3.6.7";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const COACH_EMAILS = (Deno.env.get("COACH_EMAILS") ?? "shahartwig1@gmail.com,eyalshlomi8@gmail.com")
+const COACH_EMAILS_FALLBACK = (Deno.env.get("COACH_EMAILS") ?? "shahartwig1@gmail.com,eyalshlomi8@gmail.com")
   .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
 const RUN_COMPLETE_EMAILS = (Deno.env.get("RUN_COMPLETE_EMAILS") ?? "eyalshlomi8@gmail.com")
   .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
@@ -67,6 +68,16 @@ async function subscriptionsFor(emails: string[] | "all") {
   const filter = emails === "all" ? "" : `&email=${inList(emails)}`;
   return await sb(`push_subscriptions?select=endpoint,email,p256dh,auth${filter}`) as
     { endpoint: string; email: string; p256dh: string; auth: string }[];
+}
+
+// The real source of truth for "who is a coach" -- one row per coach in the `roles` table
+// (supabase/roles.sql), instead of the env-var list. Falls back to COACH_EMAILS_FALLBACK
+// only if that table is empty or missing (e.g. the migration hasn't been run yet), so a
+// query failure can never silently turn into "nobody is a coach".
+async function coachEmails(): Promise<string[]> {
+  const rows = await sb(`roles?select=email&role=eq.coach`).catch(() => []) as { email: string }[];
+  const emails = rows.map(r => r.email.toLowerCase());
+  return emails.length ? emails : COACH_EMAILS_FALLBACK;
 }
 
 // runner id -> login email, via the runner_emails table (empty until a runner has a login).
@@ -143,6 +154,7 @@ Deno.serve(async req => {
     if (!user?.email) return json({ error: "not logged in" }, 401);
     const actorEmail = String(user.email).toLowerCase();
     const actor = actorEmail.split("@")[0];
+    const COACH_EMAILS = await coachEmails();
     const isCoach = COACH_EMAILS.includes(actorEmail);
 
     let recipients: string[] | "all";

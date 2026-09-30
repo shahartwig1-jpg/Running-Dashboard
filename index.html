@@ -1775,10 +1775,12 @@ const SUPABASE_URL = "https://vyvfrnkxvsjinzflrnig.supabase.co";
 const SUPABASE_KEY = "sb_publishable_XfY3Rn_Nv7mCeVtQ5VN38A_eegSLLV7"; // safe to expose — protected by RLS, not secrecy
 const SESSION_KEY = "runDashboardSession";
 // Just a UI-level convenience to show/hide the plan editor — the real enforcement is the
-// Supabase RLS policy on plan_history (supabase/plan_edit_policy.sql), which checks this
-// same email server-side. Someone bypassing this client-side check would still get
-// rejected by Postgres on save.
-const COACH_EMAILS = ["shahartwig1@gmail.com", "eyalshlomi8@gmail.com"];
+// Supabase RLS policy on plan_history (supabase/roles.sql), which checks the same "coach"
+// role server-side. Someone bypassing this client-side check would still get rejected by
+// Postgres on save. This starting value is only a fallback for demo mode (no login) or if
+// the roles.sql migration hasn't been run yet — loadFromSupabase() overwrites it with the
+// real roles table once logged in, see below.
+let COACH_EMAILS = ["shahartwig1@gmail.com", "eyalshlomi8@gmail.com"];
 
 // localStorage (not sessionStorage) so the installed phone app stays logged in between
 // opens; the refresh token below renews the ~1h access token without asking for the password.
@@ -2074,18 +2076,23 @@ async function loadFromSupabase(accessToken) {
   const cutoffSec = Math.floor(Date.now() / 1000) - 90 * 86400;
   const cutoffDate = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
 
-  const [runnersRaw, activitiesRaw, sleepRaw, planRaw, highlightsRaw, racesRaw] = await Promise.all([
+  const [runnersRaw, activitiesRaw, sleepRaw, planRaw, highlightsRaw, racesRaw, rolesRaw] = await Promise.all([
     supaGet(`runners?select=id,name,device&order=id`, accessToken),
     supaGet(`activities?select=*&startTimeInSeconds=gte.${cutoffSec}&order=startTimeInSeconds.desc`, accessToken),
     supaGet(`sleep?select=*&date=gte.${cutoffDate}`, accessToken),
     supaGet(`plan_history?select=ownerId,weekStart,weekday,text&order=ownerId,weekStart,weekday`, accessToken),
-    // Tolerates weekly_highlights/races not existing yet (pending migration) — never let a
-    // missing table break the whole login again, same mistake as earlier tonight.
+    // Tolerates weekly_highlights/races/roles not existing yet (pending migration) — never
+    // let a missing table break the whole login again, same mistake as earlier tonight.
     supaGet(`weekly_highlights?select=*,weekly_highlight_photos(*)&order=createdAt.desc`, accessToken).catch(() => []),
     supaGet(`races?select=*,race_rsvps(authorName)&order=date`, accessToken).catch(() => []),
+    supaGet(`roles?select=email,role`, accessToken).catch(() => []),
   ]);
 
   RUNNERS = runnersRaw.map((r, i) => ({ ...r, slot: (i % 8) + 1 }));
+  // Only overwrite the hardcoded fallback once roles.sql has actually been run and seeded —
+  // an empty/missing table must never turn into "nobody is a coach".
+  const coachesFromDb = rolesRaw.filter(r => r.role === "coach").map(r => r.email.toLowerCase());
+  if (coachesFromDb.length) COACH_EMAILS = coachesFromDb;
   ACTIVITIES = activitiesRaw;
   SLEEP = sleepRaw;
   HIGHLIGHTS = highlightsRaw;

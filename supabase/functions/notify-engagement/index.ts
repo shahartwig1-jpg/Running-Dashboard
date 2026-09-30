@@ -11,7 +11,8 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
 const SITE_URL = "https://running-dashboard-eqyc.onrender.com";
-const COACH_EMAILS = ["shahartwig1@gmail.com", "eyalshlomi8@gmail.com"];
+// Fallback only, used if the `roles` table (supabase/roles.sql) is empty/missing.
+const COACH_EMAILS_FALLBACK = ["shahartwig1@gmail.com", "eyalshlomi8@gmail.com"];
 
 async function sb(path: string) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -19,6 +20,13 @@ async function sb(path: string) {
   });
   if (!res.ok) throw new Error(`Supabase ${path} -> HTTP ${res.status}`);
   return res.json();
+}
+
+// Real source of truth for "who is a coach" -- see the matching helper in notify-push.
+async function coachEmails(): Promise<string[]> {
+  const rows = await sb(`roles?select=email&role=eq.coach`).catch(() => []) as { email: string }[];
+  const emails = rows.map((r: { email: string }) => r.email.toLowerCase());
+  return emails.length ? emails : COACH_EMAILS_FALLBACK;
 }
 
 async function sendEmail(to: string, subject: string, html: string) {
@@ -38,6 +46,7 @@ Deno.serve(async req => {
     if (payload.type !== "INSERT") return new Response("ignored", { status: 200 });
 
     if (table === "weekly_highlights") {
+      const COACH_EMAILS = await coachEmails();
       await Promise.all(COACH_EMAILS.map(email => sendEmail(
         email,
         `📝 ${record.authorName} submitted a weekly highlight for approval`,
