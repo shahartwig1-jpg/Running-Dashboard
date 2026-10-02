@@ -28,5 +28,6 @@ alter table records enable row level security;
 grant select on public.records to authenticated;
 grant select, insert, update, delete on public.records to service_role;
 
+drop policy if exists "authenticated can read records" on records;
 create policy "authenticated can read records" on records
   for select to authenticated using (true);

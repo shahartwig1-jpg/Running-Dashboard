@@ -27,6 +27,7 @@ alter table roles enable row level security;
 -- Not sensitive within this one trusted group (same reasoning as likes/comments/races)
 -- and every "only coach" policy below needs to read this table to check membership --
 -- if authenticated couldn't SELECT here, those exists(...) checks would always be false.
+drop policy if exists "authenticated can read roles" on roles;
 create policy "authenticated can read roles" on roles
   for select to authenticated using (true);
 -- Deliberately no insert/update/delete policy for authenticated: only the service_role
