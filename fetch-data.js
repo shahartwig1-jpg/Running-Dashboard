@@ -89,7 +89,8 @@ const pick = (o, ...keys) => { for (const k of keys) if (o[k] != null) return o[
 
 function normalize(a, athleteId) {
   const distance = pick(a, "distance", "icu_distance");
-  const moving = pick(a, "moving_time", "icu_moving_time", "elapsed_time");
+  // The watch's timer time (what Garmin shows as "Time"), not moving_time, which drops stopped moments.
+  const moving = pick(a, "icu_recording_time", "moving_time", "icu_moving_time", "elapsed_time");
   return {
     activityId: a.id,
     ownerId: athleteId,
