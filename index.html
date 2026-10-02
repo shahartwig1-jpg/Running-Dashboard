@@ -1420,7 +1420,7 @@ function recordBadgeHtml(activityId) {
   const rec = RECORD_BY_ACTIVITY.get(String(activityId));
   if (!rec) return "";
   if (rec.previousSeconds == null) return `<span class="rec-badge" title="First 10K logged for this runner">🏁 First 10K</span>`;
-  return `<span class="rec-badge" title="Previous best ${fmtDur(rec.previousSeconds)}">🏅 New 10K record −${fmtDur(rec.previousSeconds - rec.seconds)}</span>`;
+  return `<span class="rec-badge" title="Previous best ${fmtDur(rec.previousSeconds)}">🏅 New 10K record</span>`;
 }
 const isNewRecord = activityId => { const r = RECORD_BY_ACTIVITY.get(String(activityId)); return !!r && r.previousSeconds != null; };
 
@@ -1463,7 +1463,7 @@ function renderRecords() {
         <td>${recDate(r.startTimeInSeconds)} <span class="gs-caret">${open ? "▾" : "▸"}</span></td>
       </tr>` + (open ? `<tr><td></td><td colspan="4"><div class="rec-history">${history.map(h => `<div class="rec-history-row" data-open-activity="${esc(h.activityId)}">
           <span>${recDate(h.startTimeInSeconds)}</span><b>${fmtDur(h.seconds)}</b>
-          <span class="gs-session-meta">${h.distanceInMeters ? (h.distanceInMeters / 1000).toFixed(2) + " km" : ""}${h.previousSeconds != null ? ` · −${fmtDur(h.previousSeconds - h.seconds)}` : " · first 10K logged"}</span>
+          <span class="gs-session-meta">${h.distanceInMeters ? (h.distanceInMeters / 1000).toFixed(2) + " km" : ""}</span>
         </div>`).join("")}</div></td></tr>` : "");
     }).join("") + `</tbody></table>`;
 }
@@ -1728,9 +1728,6 @@ function openProfile(ownerId) {
     longest ? pbRow("Longest run", `${fmtKm(km(longest))} km`, recDate(longest.startTimeInSeconds), longest.activityId) : "",
     fast5 ? pbRow("Fastest 5 km+", `${fmtPace(paceOf(fast5))} /km`, `${fmtKm(km(fast5))} km · ${recDate(fast5.startTimeInSeconds)}`, fast5.activityId) : "",
   ].join("") || `<div class="empty-note" style="padding:8px 0">No runs yet</div>`;
-  const progression = tenK.length > 1 ? `<div class="section-title">10K record progression</div><div class="rec-history">${tenK.map(h => `<div class="rec-history-row" data-open-activity="${esc(h.activityId)}">
-      <span>${recDate(h.startTimeInSeconds)}</span><b>${fmtDur(h.seconds)}</b>
-      <span class="gs-session-meta">${h.distanceInMeters ? (h.distanceInMeters / 1000).toFixed(2) + " km" : ""}${h.previousSeconds != null ? ` · −${fmtDur(h.previousSeconds - h.seconds)}` : " · first 10K logged"}</span></div>`).join("")}</div>` : "";
 
   const sessions = groupSessions().filter(s => s.runnerIds.has(ownerId));
   const sessionsHtml = sessions.length ? `<div class="section-title">Group sessions (${sessions.length})</div><div class="rec-history">${sessions.slice(0, 5).map(s => {
@@ -1765,7 +1762,7 @@ function openProfile(ownerId) {
     <div class="chart-note" style="margin:-8px 0 8px">Totals cover the last 90 days</div>
     <div class="section-title">Personal bests</div>
     <div class="rec-history">${pbHtml}</div>
-    ${progression}${sessionsHtml}
+    ${sessionsHtml}
     <div class="section-title">Recent runs</div>
     <div class="rec-history">${recent || '<div class="empty-note" style="padding:8px 0">No runs yet</div>'}</div>`;
   document.getElementById("overlay").style.display = "block";
@@ -2577,7 +2574,7 @@ async function loadFromSupabase(accessToken) {
     supaGet(`weekly_highlights?select=*,weekly_highlight_photos(*)&order=createdAt.desc`, accessToken).catch(() => []),
     supaGet(`races?select=*,race_rsvps(authorName)&order=date`, accessToken).catch(() => []),
     supaGet(`roles?select=email,role`, accessToken).catch(() => []),
-    supaGet(`records?select=ownerId,distance,seconds,distanceInMeters,activityId,previousSeconds`, accessToken).catch(() => []), // records.sql not run yet -> no badges, nothing breaks
+    supaGet(`records?select=ownerId,distance,seconds,distanceInMeters,activityId,startTimeInSeconds,previousSeconds`, accessToken).catch(() => []), // records.sql not run yet -> no badges, nothing breaks
     supaGet(`profiles?select=ownerId,photoUrl`, accessToken).catch(() => []), // profiles.sql not run yet -> initials, nothing breaks
     supaRpc("my_runner_id", accessToken).catch(() => null),
   ]);
