@@ -342,6 +342,9 @@ async function fetchAll(cfg) {
     })));
   }
   if (newRuns.length) await notifyNewRuns(newRuns);
+  // Save any new personal records (supabase/records.sql). Never lets a missing table or a hiccup fail the sync.
+  try { await require("./records").updateRecords(); }
+  catch (e) { console.error(`Records update skipped (${e.message}) — has supabase/records.sql been run?`); }
 
   activities.sort((a, b) => b.startTimeInSeconds - a.startTimeInSeconds);
   // The weekly plan is now edited directly in the dashboard (writes straight to

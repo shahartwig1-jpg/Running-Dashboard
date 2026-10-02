@@ -331,6 +331,37 @@
   }
   .add-photo-btn:hover { border-color: var(--series-1); color: var(--series-1); }
 
+  /* Group sessions (auto-detected) + saved records */
+  .gs-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .gs-session { border-top: 1px solid var(--grid); }
+  .gs-session:first-child { border-top: none; }
+  .gs-session-head {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; width: 100%;
+    font: inherit; font-size: 13px; color: var(--text-primary); text-align: start;
+    background: none; border: none; cursor: pointer; padding: 10px 2px;
+  }
+  .gs-session-head:hover { background: var(--grid); border-radius: 8px; }
+  .gs-caret { width: 12px; color: var(--text-muted); font-size: 11px; }
+  .gs-session-title { font-weight: 600; }
+  .gs-session-meta { font-size: 12px; color: var(--text-muted); }
+  .gs-session-body { padding: 0 2px 10px; }
+  .gs-block { margin-bottom: 16px; }
+  .gs-block-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin: 4px 0; }
+  .gs-table tbody tr[data-open-activity] { cursor: pointer; }
+  .gs-table tbody tr[data-open-activity]:hover td { background: var(--grid); }
+  .gs-table .gs-rank { width: 30px; text-align: center; }
+  .gs-table tr.gs-me td { background: rgba(42,120,214,0.12); }
+  .avatar.sm { flex: 0 0 22px; width: 22px; height: 22px; font-size: 11px; }
+  .gs-others { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+  .gs-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 4px; }
+  .gs-photos button { padding: 0; border: none; background: var(--grid); border-radius: 8px; cursor: pointer; aspect-ratio: 4 / 3; overflow: hidden; }
+  .gs-photos img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .rec-badge {
+    display: inline-block; font-size: 11px; font-weight: 600; line-height: 1.5; white-space: nowrap;
+    color: var(--text-primary); background: rgba(237,161,0,0.18); border-radius: 999px; padding: 0 8px; margin-inline-start: 6px;
+  }
+  .rec-banner { margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; font-size: 13px; background: rgba(237,161,0,0.14); border: 1px solid rgba(237,161,0,0.45); }
+
   /* Tooltip */
   #tooltip {
     position: fixed; z-index: 10; pointer-events: none; display: none;
@@ -479,6 +510,17 @@
     <div id="highlightPending"></div>
     <div id="highlightApproved"></div>
     <div id="highlightSubmit"></div>
+  </div>
+
+  <div class="card" id="groupCard" style="display:none; margin-bottom:20px;">
+    <div class="gs-head">
+      <div>
+        <h2>🤝 Group sessions</h2>
+        <div class="sub" id="groupSub"></div>
+      </div>
+      <button id="groupToggle" class="week-nav-btn" type="button">Hide</button>
+    </div>
+    <div id="groupBody"></div>
   </div>
 
   <div class="tiles" id="tiles"></div>
@@ -1275,7 +1317,7 @@ function renderFeed() {
           <span class="feed-name">${esc(r.name)}</span>
           <span class="feed-time">${fmtDate(a.startTimeInSeconds)}</span>
         </div>
-        <div class="feed-title">${esc(a.activityName) || "Run"}</div>
+        <div class="feed-title">${esc(a.activityName) || "Run"}${recordBadgeHtml(a.activityId)}</div>
         <div class="feed-stats">
           <span><b>${fmtKm(km(a))}</b> km</span>
           <span><b>${fmtDur(a.durationInSeconds)}</b></span>
@@ -1339,6 +1381,200 @@ async function loadFeedEngagement(activityIds) {
     });
   } catch { } // activity_photos table may not exist yet — fine, feed just shows no photos
 }
+
+/* ---------- Saved records (supabase/records.sql, filled by records.js after every sync) ---------- */
+let RECORDS = []; // one row per run that beat that runner's previous best: { ownerId, distance, seconds, activityId, previousSeconds }
+let RECORD_BY_ACTIVITY = new Map();
+function setRecords(rows) {
+  RECORDS = rows;
+  RECORD_BY_ACTIVITY = new Map(rows.map(r => [String(r.activityId), r]));
+}
+function recordBadgeHtml(activityId) {
+  const rec = RECORD_BY_ACTIVITY.get(String(activityId));
+  if (!rec) return "";
+  if (rec.previousSeconds == null) return `<span class="rec-badge" title="First 10K logged for this runner">🏁 First 10K</span>`;
+  return `<span class="rec-badge" title="Previous best ${fmtDur(rec.previousSeconds)}">🏅 New 10K record −${fmtDur(rec.previousSeconds - rec.seconds)}</span>`;
+}
+const isNewRecord = activityId => { const r = RECORD_BY_ACTIVITY.get(String(activityId)); return !!r && r.previousSeconds != null; };
+
+/* ---------- Group sessions: detected automatically from the runs themselves ----------
+   A block = 3+ different runners whose runs started within 5 min of each other and cover about the
+   same distance (±8 %). Blocks less than 90 min apart are one session (warm-up -> main set ->
+   cool-down). No GPS is available, so start time + distance is the whole signal. Needs 3+ runners
+   because two people starting the same minute with the same distance can be a coincidence. */
+const GROUP_MIN_RUNNERS = 3, GROUP_START_WINDOW_S = 300, GROUP_DIST_TOL = 0.08, GROUP_SESSION_GAP_S = 90 * 60;
+let groupCache = { src: null, len: -1, sessions: [] };
+const paceOf = a => a.durationInSeconds / km(a);
+
+function groupSessions() {
+  if (groupCache.src === ACTIVITIES && groupCache.len === ACTIVITIES.length) return groupCache.sessions;
+  const acts = ACTIVITIES.filter(a => !a.hidden && a.distanceInMeters > 0 && a.durationInSeconds > 0)
+    .sort((x, y) => x.startTimeInSeconds - y.startTimeInSeconds);
+  const open = [];
+  for (const a of acts) {
+    let home = null;
+    for (let i = open.length - 1; i >= 0; i--) {
+      const b = open[i];
+      if (a.startTimeInSeconds - b.start > GROUP_START_WINDOW_S) break; // sorted by start: everything earlier is even further away
+      if (b.members.some(m => m.ownerId === a.ownerId)) continue;
+      const avg = b.distSum / b.members.length;
+      if (Math.abs(a.distanceInMeters - avg) / avg <= GROUP_DIST_TOL) { home = b; break; }
+    }
+    if (home) { home.members.push(a); home.distSum += a.distanceInMeters; }
+    else open.push({ start: a.startTimeInSeconds, members: [a], distSum: a.distanceInMeters });
+  }
+
+  const blocks = open.filter(b => b.members.length >= GROUP_MIN_RUNNERS).map(b => {
+    const members = b.members.slice().sort((x, y) => paceOf(x) - paceOf(y));
+    const inBlock = new Set(members.map(m => m.ownerId));
+    // Runners who set off with the group but covered a different distance (e.g. stopped early).
+    const others = []; const seen = new Set();
+    for (const a of acts) {
+      if (Math.abs(a.startTimeInSeconds - b.start) > GROUP_START_WINDOW_S || inBlock.has(a.ownerId) || seen.has(a.ownerId)) continue;
+      seen.add(a.ownerId); others.push(a);
+    }
+    return {
+      start: b.start, members, others, avgKm: b.distSum / b.members.length / 1000,
+      end: Math.max(...members.map(m => m.startTimeInSeconds + m.durationInSeconds)),
+    };
+  }).sort((x, y) => x.start - y.start);
+
+  const sessions = [];
+  for (const b of blocks) {
+    const last = sessions[sessions.length - 1];
+    if (last && b.start - last.end <= GROUP_SESSION_GAP_S) { last.blocks.push(b); last.end = Math.max(last.end, b.end); }
+    else sessions.push({ start: b.start, end: b.end, blocks: [b] });
+  }
+  sessions.forEach(s => {
+    s.id = String(s.start);
+    s.runnerIds = new Set(s.blocks.flatMap(b => b.members.map(m => m.ownerId)));
+    s.blocks.forEach((b, i) => { b.index = i; b.session = s; });
+  });
+  sessions.reverse(); // newest first
+  groupCache = { src: ACTIVITIES, len: ACTIVITIES.length, sessions };
+  return sessions;
+}
+
+const findGroupBlock = activityId => {
+  for (const s of groupSessions()) for (const b of s.blocks) if (b.members.some(m => String(m.activityId) === String(activityId))) return b;
+  return null;
+};
+
+let groupExpanded = null; // Set of session ids; null until first render opens the newest one
+let groupShown = 3;
+const groupPhotoCache = new Map(); // session id -> [{ activityId, url, authorName }]
+const groupCardHidden = () => { try { return localStorage.getItem("groupCardHidden") === "1"; } catch { return false; } };
+
+const medal = i => ["🥇", "🥈", "🥉"][i] || String(i + 1);
+function groupRows(members, highlightId) {
+  return members.map((a, i) => {
+    const r = runnerById(a.ownerId) || { name: String(a.ownerId), slot: 1 };
+    return `<tr data-open-activity="${esc(a.activityId)}"${String(a.activityId) === String(highlightId) ? ' class="gs-me"' : ""}>
+      <td class="gs-rank">${medal(i)}</td>
+      <td><span class="runner-cell"><span class="avatar sm" style="background:${colorOf(r)}">${esc((r.name[0] || "?").toUpperCase())}</span>${esc(r.name)}</span>${recordBadgeHtml(a.activityId)}</td>
+      <td>${fmtDur(a.durationInSeconds)}</td>
+      <td>${fmtPace(paceOf(a))}</td>
+      <td>${a.averageHeartRateInBeatsPerMinute ?? "-"}</td>
+    </tr>`;
+  }).join("");
+}
+const groupTableHtml = (members, highlightId) => `<table class="gs-table"><thead><tr><th class="gs-rank">#</th><th>Runner</th><th>Time</th><th>Pace /km</th><th>HR</th></tr></thead><tbody>${groupRows(members, highlightId)}</tbody></table>`;
+function othersHtml(b) {
+  if (!b.others.length) return "";
+  return `<div class="gs-others">Also started with the group: ${b.others.map(a => `${esc((runnerById(a.ownerId) || { name: a.ownerId }).name)} (${fmtKm(km(a))} km, ${fmtDur(a.durationInSeconds)})`).join(" · ")}</div>`;
+}
+
+function renderGroupSessions() {
+  const card = document.getElementById("groupCard");
+  let sessions = groupSessions();
+  if (selectedRunnerId !== null) sessions = sessions.filter(s => s.runnerIds.has(selectedRunnerId));
+  if (!sessions.length) { card.style.display = "none"; return; }
+  card.style.display = "";
+  const hidden = groupCardHidden();
+  document.getElementById("groupToggle").textContent = hidden ? "Show" : "Hide";
+  document.getElementById("groupSub").textContent = `${sessions.length} session${sessions.length > 1 ? "s" : ""} detected from runs that started together` +
+    (selectedRunnerId !== null ? " · " + runnerById(selectedRunnerId).name : "");
+  const body = document.getElementById("groupBody");
+  if (hidden) { body.innerHTML = ""; return; }
+  if (groupExpanded === null) groupExpanded = new Set([sessions[0].id]);
+
+  const shown = sessions.slice(0, groupShown);
+  body.innerHTML = shown.map(s => {
+    const open = groupExpanded.has(s.id);
+    const when = new Date(s.start * 1000);
+    const records = s.blocks.flatMap(b => b.members).filter(m => isNewRecord(m.activityId)).length;
+    const head = `<button class="gs-session-head" type="button" data-session="${esc(s.id)}" aria-expanded="${open}">
+      <span class="gs-caret">${open ? "▾" : "▸"}</span>
+      <span class="gs-session-title">${when.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · ${when.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
+      <span class="gs-session-meta">${s.runnerIds.size} runners · ${s.blocks.length} block${s.blocks.length > 1 ? "s" : ""}${records ? ` · 🏅 ${records} new 10K record${records > 1 ? "s" : ""}` : ""}</span>
+    </button>`;
+    if (!open) return `<div class="gs-session">${head}</div>`;
+    const blocks = s.blocks.map(b => `<div class="gs-block">
+      <div class="gs-block-title">Block ${b.index + 1} of ${s.blocks.length} · ${fmtKm(b.avgKm)} km · ${b.members.length} runners</div>
+      ${groupTableHtml(b.members)}${othersHtml(b)}
+    </div>`).join("");
+    return `<div class="gs-session">${head}<div class="gs-session-body">${blocks}<div class="gs-photos" data-photos-for="${esc(s.id)}"></div></div></div>`;
+  }).join("") + (sessions.length > groupShown ? `<button id="groupMore" class="week-nav-btn" type="button" style="margin-top:8px;">Show earlier sessions</button>` : "");
+
+  shown.filter(s => groupExpanded.has(s.id)).forEach(loadSessionPhotos);
+}
+
+// Photos people attached to any run of the session. Needs a login (RLS), so it silently shows nothing otherwise.
+async function loadSessionPhotos(s) {
+  const paint = photos => {
+    const el = document.querySelector(`[data-photos-for="${CSS.escape(s.id)}"]`);
+    if (!el) return;
+    el.innerHTML = photos.map(p => `<button type="button" data-open-activity="${esc(p.activityId)}" title="Photo by ${esc(p.authorName)}"><img src="${esc(safeUrl(p.url))}" alt="Photo by ${esc(p.authorName)}" loading="lazy"></button>`).join("");
+  };
+  if (groupPhotoCache.has(s.id)) { paint(groupPhotoCache.get(s.id)); return; }
+  const session = getSession();
+  if (!session?.access_token) return;
+  const ids = s.blocks.flatMap(b => b.members.map(m => encodeURIComponent(m.activityId))).join(",");
+  try {
+    const rows = await supaGet(`activity_photos?activityId=in.(${ids})&select=activityId,url,authorName&order=createdAt.desc`, session.access_token);
+    groupPhotoCache.set(s.id, rows.filter(p => safeUrl(p.url)));
+    paint(groupPhotoCache.get(s.id));
+  } catch { } // activity_photos may not exist yet — the card just has no photos
+}
+
+document.getElementById("groupToggle").addEventListener("click", () => {
+  try { localStorage.setItem("groupCardHidden", groupCardHidden() ? "0" : "1"); } catch { }
+  renderGroupSessions();
+});
+document.getElementById("groupBody").addEventListener("click", e => {
+  const head = e.target.closest(".gs-session-head");
+  if (head) {
+    const id = head.dataset.session;
+    groupExpanded.has(id) ? groupExpanded.delete(id) : groupExpanded.add(id);
+    renderGroupSessions();
+    return;
+  }
+  if (e.target.closest("#groupMore")) { groupShown += 3; renderGroupSessions(); return; }
+  const row = e.target.closest("[data-open-activity]");
+  if (row) openDetail(row.dataset.openActivity);
+});
+
+// Shown inside the run's detail panel: every runner's result for the block this run belongs to, in order.
+function groupResultsHtml(activityId) {
+  const b = findGroupBlock(activityId);
+  if (!b) return "";
+  const when = new Date(b.start * 1000).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  return `<div class="section-title">Group results · ${when} · block ${b.index + 1} of ${b.session.blocks.length} (${fmtKm(b.avgKm)} km)</div>
+    ${groupTableHtml(b.members, activityId)}${othersHtml(b)}
+    <div class="chart-note">Ranked by pace · tap a runner to open their run</div>`;
+}
+function recordBannerHtml(activityId) {
+  const rec = RECORD_BY_ACTIVITY.get(String(activityId));
+  if (!rec) return "";
+  return rec.previousSeconds == null
+    ? `<div class="rec-banner">🏁 First 10K logged · <b>${fmtDur(rec.seconds)}</b></div>`
+    : `<div class="rec-banner">🏅 <b>New 10K record · ${fmtDur(rec.seconds)}</b> — ${fmtDur(rec.previousSeconds - rec.seconds)} faster than the previous best (${fmtDur(rec.previousSeconds)})</div>`;
+}
+// One click handler for rows inside the detail panel (the panel's HTML is rebuilt on every open).
+document.getElementById("sheet").addEventListener("click", e => {
+  const row = e.target.closest("[data-open-activity]");
+  if (row) openDetail(row.dataset.openActivity);
+});
 
 /* ---------- per-activity detail panel: laps + streams (real data only) ---------- */
 const detailCache = new Map();
@@ -1548,7 +1784,7 @@ async function openDetail(activityId) {
   if (!detail) {
     body.innerHTML = `<div class="empty-note">No details (laps/charts) for this run yet.<br>
       Details are only kept for the last 20 runs — rerun <code>node fetch-data.js</code> if this is a new run.</div>
-      ${stickerSectionHtml(a)}
+      ${recordBannerHtml(activityId)}${groupResultsHtml(activityId)}${stickerSectionHtml(a)}
       <div id="engagement"></div>`;
     initSticker(a);
     loadEngagement(activityId);
@@ -1588,7 +1824,7 @@ async function openDetail(activityId) {
       <div class="chart-note">X axis: distance (km) · lower pace = faster running</div>`;
   }
 
-  body.innerHTML = tilesHtml + stickerSectionHtml(a) +
+  body.innerHTML = recordBannerHtml(activityId) + tilesHtml + groupResultsHtml(activityId) + stickerSectionHtml(a) +
     `<div class="section-title">Laps (${detail.laps?.length || 0})</div>${lapsHtml}` +
     chartsHtml +
     `<div id="engagement"></div>`;
@@ -1706,7 +1942,7 @@ document.body.addEventListener("click", e => {
   btn.textContent = minimized ? "Expand" : "Minimize";
 }, true);
 
-function renderAll() { renderRunnerFilters(); renderWeekNav(); renderHighlights(); renderRaces(); renderTiles(); renderBars(); renderSleep(); renderPlan(); renderWeekday(); renderFeed(); }
+function renderAll() { renderRunnerFilters(); renderWeekNav(); renderHighlights(); renderRaces(); renderGroupSessions(); renderTiles(); renderBars(); renderSleep(); renderPlan(); renderWeekday(); renderFeed(); }
 
 document.querySelectorAll('.filters[aria-label="Time range"] button').forEach(btn => {
   btn.addEventListener("click", () => {
@@ -2077,7 +2313,7 @@ async function loadFromSupabase(accessToken) {
   const cutoffSec = Math.floor(Date.now() / 1000) - 90 * 86400;
   const cutoffDate = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
 
-  const [runnersRaw, activitiesRaw, sleepRaw, planRaw, highlightsRaw, racesRaw, rolesRaw] = await Promise.all([
+  const [runnersRaw, activitiesRaw, sleepRaw, planRaw, highlightsRaw, racesRaw, rolesRaw, recordsRaw] = await Promise.all([
     supaGet(`runners?select=id,name,device&order=id`, accessToken),
     supaGet(`activities?select=*&startTimeInSeconds=gte.${cutoffSec}&order=startTimeInSeconds.desc`, accessToken),
     supaGet(`sleep?select=*&date=gte.${cutoffDate}`, accessToken),
@@ -2087,9 +2323,11 @@ async function loadFromSupabase(accessToken) {
     supaGet(`weekly_highlights?select=*,weekly_highlight_photos(*)&order=createdAt.desc`, accessToken).catch(() => []),
     supaGet(`races?select=*,race_rsvps(authorName)&order=date`, accessToken).catch(() => []),
     supaGet(`roles?select=email,role`, accessToken).catch(() => []),
+    supaGet(`records?select=ownerId,distance,seconds,activityId,previousSeconds`, accessToken).catch(() => []), // records.sql not run yet -> no badges, nothing breaks
   ]);
 
   RUNNERS = runnersRaw.map((r, i) => ({ ...r, slot: (i % 8) + 1 }));
+  setRecords(recordsRaw);
   // Only overwrite the hardcoded fallback once roles.sql has actually been run and seeded —
   // an empty/missing table must never turn into "nobody is a coach".
   const coachesFromDb = rolesRaw.filter(r => r.role === "coach").map(r => r.email.toLowerCase());
