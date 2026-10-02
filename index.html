@@ -1678,7 +1678,7 @@ function recordBannerHtml(activityId) {
   const dist = rec.distanceInMeters ? ` for ${(rec.distanceInMeters / 1000).toFixed(2)} km` : "";
   return rec.previousSeconds == null
     ? `<div class="rec-banner">🏁 First 10K logged · <b>${fmtDur(rec.seconds)}</b>${dist}</div>`
-    : `<div class="rec-banner">🏅 <b>New 10K record · ${fmtDur(rec.seconds)}</b>${dist} — ${fmtDur(rec.previousSeconds - rec.seconds)} faster than the previous best (${fmtDur(rec.previousSeconds)})</div>`;
+    : `<div class="rec-banner">🏅 <b>New 10K record · ${fmtDur(rec.seconds)}</b>${dist}</div>`;
 }
 // One click handler for rows inside the detail panel (the panel's HTML is rebuilt on every open).
 document.getElementById("sheet").addEventListener("click", e => {
