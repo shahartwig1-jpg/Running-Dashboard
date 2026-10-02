@@ -346,7 +346,12 @@
   .gs-session-meta { font-size: 12px; color: var(--text-muted); }
   .gs-session-body { padding: 0 2px 10px; }
   .gs-block { margin-bottom: 16px; }
-  .gs-block-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin: 4px 0; }
+  .gs-block-title {
+    display: flex; align-items: center; gap: 6px; width: 100%; font: inherit; font-size: 12px; font-weight: 600;
+    color: var(--text-secondary); background: none; border: none; cursor: pointer; text-align: start; padding: 4px 0; margin: 4px 0;
+  }
+  .gs-block-title.main { color: var(--text-primary); font-size: 13px; }
+  .gs-block-title:hover { color: var(--series-1); }
   .gs-table tbody tr[data-open-activity] { cursor: pointer; }
   .gs-table tbody tr[data-open-activity]:hover td { background: var(--grid); }
   .gs-table .gs-rank { width: 30px; text-align: center; }
@@ -1402,7 +1407,12 @@ const isNewRecord = activityId => { const r = RECORD_BY_ACTIVITY.get(String(acti
    same distance (±8 %). Blocks less than 90 min apart are one session (warm-up -> main set ->
    cool-down). No GPS is available, so start time + distance is the whole signal. Needs 3+ runners
    because two people starting the same minute with the same distance can be a coincidence. */
-const GROUP_MIN_RUNNERS = 3, GROUP_START_WINDOW_S = 300, GROUP_DIST_TOL = 0.08, GROUP_SESSION_GAP_S = 90 * 60;
+const GROUP_MIN_RUNNERS = 3, GROUP_START_WINDOW_S = 300, GROUP_DIST_TOL = 0.08, GROUP_SESSION_GAP_S = 90 * 60, GROUP_MAIN_RATIO = 1.15;
+const BLOCK_ROLE_LABEL = { main: "Main set", warmup: "Warm-up", cooldown: "Cool-down" };
+const blockLabel = b => BLOCK_ROLE_LABEL[b.role] || `Block ${b.index + 1} of ${b.session.blocks.length}`;
+const blockKey = b => b.session.id + ":" + b.index;
+const groupBlockOverride = new Map(); // block key -> true/false once the user toggled it
+const blockOpen = b => groupBlockOverride.has(blockKey(b)) ? groupBlockOverride.get(blockKey(b)) : b.role !== "warmup" && b.role !== "cooldown";
 let groupCache = { src: null, len: -1, sessions: [] };
 const paceOf = a => a.durationInSeconds / km(a);
 
@@ -1449,6 +1459,14 @@ function groupSessions() {
     s.id = String(s.start);
     s.runnerIds = new Set(s.blocks.flatMap(b => b.members.map(m => m.ownerId)));
     s.blocks.forEach((b, i) => { b.index = i; b.session = s; });
+    // The main set is the longest block; earlier blocks are the warm-up, later ones the cool-down.
+    // If the longest isn't clearly longer than the rest (e.g. repeated intervals) nothing is labelled.
+    if (s.blocks.length >= 2) {
+      const byLen = s.blocks.slice().sort((x, y) => y.avgKm - x.avgKm);
+      if (byLen[0].avgKm >= byLen[1].avgKm * GROUP_MAIN_RATIO) {
+        s.blocks.forEach(b => { b.role = b === byLen[0] ? "main" : b.index < byLen[0].index ? "warmup" : "cooldown"; });
+      }
+    }
   });
   sessions.reverse(); // newest first
   groupCache = { src: ACTIVITIES, len: ACTIVITIES.length, sessions };
@@ -1509,10 +1527,15 @@ function renderGroupSessions() {
       <span class="gs-session-meta">${s.runnerIds.size} runners · ${s.blocks.length} block${s.blocks.length > 1 ? "s" : ""}${records ? ` · 🏅 ${records} new 10K record${records > 1 ? "s" : ""}` : ""}</span>
     </button>`;
     if (!open) return `<div class="gs-session">${head}</div>`;
-    const blocks = s.blocks.map(b => `<div class="gs-block">
-      <div class="gs-block-title">Block ${b.index + 1} of ${s.blocks.length} · ${fmtKm(b.avgKm)} km · ${b.members.length} runners</div>
-      ${groupTableHtml(b.members)}${othersHtml(b)}
-    </div>`).join("");
+    const blocks = s.blocks.map(b => {
+      const bOpen = blockOpen(b);
+      return `<div class="gs-block">
+      <button class="gs-block-title${b.role === "main" ? " main" : ""}" type="button" data-block="${esc(blockKey(b))}" aria-expanded="${bOpen}">
+        <span class="gs-caret">${bOpen ? "▾" : "▸"}</span>${esc(blockLabel(b))} · ${fmtKm(b.avgKm)} km · ${b.members.length} runners
+      </button>
+      ${bOpen ? groupTableHtml(b.members) + othersHtml(b) : ""}
+    </div>`;
+    }).join("");
     return `<div class="gs-session">${head}<div class="gs-session-body">${blocks}<div class="gs-photos" data-photos-for="${esc(s.id)}"></div></div></div>`;
   }).join("") + (sessions.length > groupShown ? `<button id="groupMore" class="week-nav-btn" type="button" style="margin-top:8px;">Show earlier sessions</button>` : "");
 
@@ -1549,6 +1572,12 @@ document.getElementById("groupBody").addEventListener("click", e => {
     renderGroupSessions();
     return;
   }
+  const blockBtn = e.target.closest(".gs-block-title");
+  if (blockBtn) {
+    groupBlockOverride.set(blockBtn.dataset.block, blockBtn.getAttribute("aria-expanded") !== "true");
+    renderGroupSessions();
+    return;
+  }
   if (e.target.closest("#groupMore")) { groupShown += 3; renderGroupSessions(); return; }
   const row = e.target.closest("[data-open-activity]");
   if (row) openDetail(row.dataset.openActivity);
@@ -1559,7 +1588,7 @@ function groupResultsHtml(activityId) {
   const b = findGroupBlock(activityId);
   if (!b) return "";
   const when = new Date(b.start * 1000).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-  return `<div class="section-title">Group results · ${when} · block ${b.index + 1} of ${b.session.blocks.length} (${fmtKm(b.avgKm)} km)</div>
+  return `<div class="section-title">Group results · ${when} · ${esc(blockLabel(b))} (${fmtKm(b.avgKm)} km)</div>
     ${groupTableHtml(b.members, activityId)}${othersHtml(b)}
     <div class="chart-note">Ranked by pace · tap a runner to open their run</div>`;
 }
