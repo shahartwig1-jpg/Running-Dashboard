@@ -1447,11 +1447,11 @@ function loadStickerLogo() {
 
 async function renderSticker(a) {
   const logo = await loadStickerLogo();
-  // Portrait layout (fits a story): angel + Hebrew name on top, then distance / pace / time stacked,
+  // Horizontal layout: angel + Hebrew name on top, then distance / pace / time side by side in one row,
   // each a big heavy-italic number with its unit at the same size and a small tracked-out label. All white.
   const DISPLAY = '"Avenir Next Condensed", "Bahnschrift", "Arial Narrow", "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif';
   const SERIF = '"Times New Roman", "David", Georgia, serif';
-  const PAD = 40, ANGEL_H = 250, NAME_GAP = 6, NAME_SIZE = 68, NAME_H = 82, GAP = 30, SIZE = 124, LABEL_DROP = 44, BLOCK_GAP = 32;
+  const PAD = 40, ANGEL_H = 250, NAME_GAP = 6, NAME_SIZE = 68, NAME_H = 82, GAP = 30, SIZE = 104, LABEL_DROP = 44, COL_PAD = 30;
 
   const stats = [
     { value: km(a).toFixed(2), unit: "km", label: "DISTANCE" },
@@ -1464,9 +1464,10 @@ async function renderSticker(a) {
   measure.font = `italic 800 ${SIZE}px ${DISPLAY}`;
   const maxW = Math.max(...stats.map(st => measure.measureText(line(st)).width));
   const logoW = ANGEL_H * logo.naturalWidth / logo.naturalHeight;
-  const W = Math.ceil(Math.max(maxW + PAD * 2, 540)); // as wide as its content, no empty transparent margins
+  const colW = maxW + COL_PAD * 2; // every column as wide as the widest stat, so the three sit evenly spaced
+  const W = Math.ceil(colW * stats.length + PAD * 2); // as wide as its content, no empty transparent margins
   const CAP = SIZE * 0.78, blockH = CAP + LABEL_DROP + 6;
-  const H = Math.ceil(PAD + ANGEL_H + NAME_GAP + NAME_H + GAP + stats.length * blockH + (stats.length - 1) * BLOCK_GAP + PAD);
+  const H = Math.ceil(PAD + ANGEL_H + NAME_GAP + NAME_H + GAP + blockH + PAD);
 
   const canvas = document.createElement("canvas");
   canvas.width = W; canvas.height = H;
@@ -1478,21 +1479,21 @@ async function renderSticker(a) {
   ctx.fillText("מלאכיות", W / 2, PAD + ANGEL_H + NAME_GAP + NAME_SIZE * 0.88);
   ctx.direction = "ltr";
 
-  let y = PAD + ANGEL_H + NAME_GAP + NAME_H + GAP;
+  const y = PAD + ANGEL_H + NAME_GAP + NAME_H + GAP;
+  const baseY = y + CAP;
   stats.forEach((st, i) => {
-    const baseY = y + CAP;
+    const cx = PAD + colW * i + colW / 2;
     ctx.textAlign = "center"; ctx.fillStyle = "#fff"; ctx.font = `italic 800 ${SIZE}px ${DISPLAY}`;
-    ctx.fillText(line(st), W / 2, baseY);
+    ctx.fillText(line(st), cx, baseY);
     ctx.fillStyle = "rgba(255,255,255,0.88)"; ctx.font = `700 28px ${DISPLAY}`;
     if ("letterSpacing" in ctx) ctx.letterSpacing = "7px";
-    ctx.fillText(st.label, W / 2 + 3.5, baseY + LABEL_DROP); // +3.5 re-centres text that has trailing letter-spacing
+    ctx.fillText(st.label, cx + 3.5, baseY + LABEL_DROP); // +3.5 re-centres text that has trailing letter-spacing
     if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
-    if (i < stats.length - 1) { // short divider between stats
-      const dy = y + blockH + BLOCK_GAP / 2;
+    if (i < stats.length - 1) { // short vertical divider between stats
+      const dx = PAD + colW * (i + 1);
       ctx.strokeStyle = "rgba(255,255,255,0.38)"; ctx.lineWidth = 2; ctx.lineCap = "round";
-      ctx.beginPath(); ctx.moveTo(W / 2 - 46, dy); ctx.lineTo(W / 2 + 46, dy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(dx, y + CAP * 0.1); ctx.lineTo(dx, y + CAP + LABEL_DROP - 6); ctx.stroke();
     }
-    y += blockH + BLOCK_GAP;
   });
   return canvas;
 }
