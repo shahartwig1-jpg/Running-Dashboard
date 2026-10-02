@@ -2,14 +2,15 @@
 // runs oldest -> newest and saves each run that beat their previous best at a tracked distance.
 // Called by fetch-data.js after every sync; also runnable on its own:  node records.js
 //
-// A "10K" run is one recorded between 10.0 and 10.5 km; its 10K time is scaled to exactly
-// 10 km (duration x 10000 / distance), so a watch that logged 10.12 km isn't unfairly slow.
+// A "10K" run is one recorded between 10.0 and 10.3 km. The record time is the ACTUAL time the
+// watch showed when it was stopped -- nothing is scaled or estimated -- and the real distance is
+// saved next to it. The narrow window keeps the comparison fair (at most ~3% distance difference).
 // Limit: a fast 10 km hidden inside a longer run (e.g. a half marathon) is not counted -- that
 // would need the per-second distance stream, which is only kept for the last few runs.
 const fs = require("fs");
 const path = require("path");
 
-const DISTANCES = [{ key: "10k", meters: 10000, maxMeters: 10500 }];
+const DISTANCES = [{ key: "10k", meters: 10000, maxMeters: 10300 }];
 
 function creds() {
   const read = f => (fs.existsSync(path.join(__dirname, f)) ? fs.readFileSync(path.join(__dirname, f), "utf8").trim() : "");
@@ -52,11 +53,11 @@ function computeRecords(activities) {
       let best = null;
       for (const a of runs) {
         if (!(a.distanceInMeters >= d.meters && a.distanceInMeters <= d.maxMeters && a.durationInSeconds > 0)) continue;
-        const seconds = Math.round(a.durationInSeconds * d.meters / a.distanceInMeters);
+        const seconds = Math.round(a.durationInSeconds); // the watch's own stopped time
         if (best === null || seconds < best) {
           out.push({
-            ownerId: String(ownerId), distance: d.key, seconds, activityId: String(a.activityId),
-            startTimeInSeconds: a.startTimeInSeconds, previousSeconds: best,
+            ownerId: String(ownerId), distance: d.key, seconds, distanceInMeters: Math.round(a.distanceInMeters),
+            activityId: String(a.activityId), startTimeInSeconds: a.startTimeInSeconds, previousSeconds: best,
           });
           best = seconds;
         }

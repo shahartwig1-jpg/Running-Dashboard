@@ -1595,9 +1595,11 @@ function groupResultsHtml(activityId) {
 function recordBannerHtml(activityId) {
   const rec = RECORD_BY_ACTIVITY.get(String(activityId));
   if (!rec) return "";
+  // The time is the watch's own stopped time for the distance it actually recorded, not scaled to exactly 10 km.
+  const dist = rec.distanceInMeters ? ` for ${(rec.distanceInMeters / 1000).toFixed(2)} km` : "";
   return rec.previousSeconds == null
-    ? `<div class="rec-banner">🏁 First 10K logged · <b>${fmtDur(rec.seconds)}</b></div>`
-    : `<div class="rec-banner">🏅 <b>New 10K record · ${fmtDur(rec.seconds)}</b> — ${fmtDur(rec.previousSeconds - rec.seconds)} faster than the previous best (${fmtDur(rec.previousSeconds)})</div>`;
+    ? `<div class="rec-banner">🏁 First 10K logged · <b>${fmtDur(rec.seconds)}</b>${dist}</div>`
+    : `<div class="rec-banner">🏅 <b>New 10K record · ${fmtDur(rec.seconds)}</b>${dist} — ${fmtDur(rec.previousSeconds - rec.seconds)} faster than the previous best (${fmtDur(rec.previousSeconds)})</div>`;
 }
 // One click handler for rows inside the detail panel (the panel's HTML is rebuilt on every open).
 document.getElementById("sheet").addEventListener("click", e => {
@@ -2352,7 +2354,7 @@ async function loadFromSupabase(accessToken) {
     supaGet(`weekly_highlights?select=*,weekly_highlight_photos(*)&order=createdAt.desc`, accessToken).catch(() => []),
     supaGet(`races?select=*,race_rsvps(authorName)&order=date`, accessToken).catch(() => []),
     supaGet(`roles?select=email,role`, accessToken).catch(() => []),
-    supaGet(`records?select=ownerId,distance,seconds,activityId,previousSeconds`, accessToken).catch(() => []), // records.sql not run yet -> no badges, nothing breaks
+    supaGet(`records?select=ownerId,distance,seconds,distanceInMeters,activityId,previousSeconds`, accessToken).catch(() => []), // records.sql not run yet -> no badges, nothing breaks
   ]);
 
   RUNNERS = runnersRaw.map((r, i) => ({ ...r, slot: (i % 8) + 1 }));

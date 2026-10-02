@@ -13,7 +13,8 @@
 create table if not exists records (
   "ownerId" text not null,
   distance text not null,
-  seconds integer not null,
+  seconds integer not null,                -- the watch's actual stopped time, not scaled to the distance
+  "distanceInMeters" integer not null,     -- the distance that run really covered (10.0 - 10.3 km for '10k')
   "activityId" text not null,
   "startTimeInSeconds" bigint not null,
   "previousSeconds" integer,
