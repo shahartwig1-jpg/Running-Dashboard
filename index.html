@@ -539,17 +539,6 @@
     <div id="groupBody"></div>
   </div>
 
-  <div class="card" id="recordsCard" style="display:none; margin-bottom:20px;">
-    <div class="gs-head">
-      <div>
-        <h2>🏅 Records</h2>
-        <div class="sub" id="recordsSub"></div>
-      </div>
-      <button id="recordsToggle" class="week-nav-btn" type="button">Hide</button>
-    </div>
-    <div id="recordsBody"></div>
-  </div>
-
   <div class="tiles" id="tiles"></div>
 
   <div class="cards" id="cardsRow">
@@ -1424,62 +1413,8 @@ function recordBadgeHtml(activityId) {
 }
 const isNewRecord = activityId => { const r = RECORD_BY_ACTIVITY.get(String(activityId)); return !!r && r.previousSeconds != null; };
 
-/* ---------- Records card: everyone's best 10K, and how each record improved over time ---------- */
-const recordsCardHidden = () => { try { return localStorage.getItem("recordsCardHidden") === "1"; } catch { return false; } };
-const recordsOpen = new Set(); // runner ids whose progression is expanded
+/* ---------- Date format used by the profile's personal bests ---------- */
 const recDate = ts => new Date(ts * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-
-function renderRecords() {
-  const card = document.getElementById("recordsCard");
-  const best = new Map(); // runner id -> their fastest 10K record row
-  for (const r of RECORDS) {
-    if (r.distance !== "10k") continue;
-    const cur = best.get(r.ownerId);
-    if (!cur || r.seconds < cur.seconds) best.set(r.ownerId, r);
-  }
-  let rows = [...best.values()].sort((a, b) => a.seconds - b.seconds);
-  if (selectedRunnerId !== null) rows = rows.filter(r => r.ownerId === selectedRunnerId);
-  if (!rows.length) { card.style.display = "none"; return; }
-  card.style.display = "";
-  const hidden = recordsCardHidden();
-  document.getElementById("recordsToggle").textContent = hidden ? "Show" : "Hide";
-  document.getElementById("recordsSub").textContent = "10K · the watch's actual time · runs of 10.0–10.3 km" +
-    (selectedRunnerId !== null ? " · " + runnerById(selectedRunnerId).name : "");
-  const body = document.getElementById("recordsBody");
-  if (hidden) { body.innerHTML = ""; return; }
-
-  const recent = ts => Date.now() / 1000 - ts < 7 * 86400;
-  const distKm = r => r.distanceInMeters ? r.distanceInMeters / 1000 : 10;
-  body.innerHTML = `<table class="gs-table"><thead><tr><th class="gs-rank">#</th><th>Runner</th><th>Best 10K</th><th>Pace /km</th><th>Set on</th></tr></thead><tbody>` +
-    rows.map((r, i) => {
-      const runner = runnerById(r.ownerId) || { name: String(r.ownerId), slot: 1 };
-      const open = recordsOpen.has(r.ownerId) || selectedRunnerId !== null;
-      const history = RECORDS.filter(x => x.ownerId === r.ownerId && x.distance === "10k").sort((a, b) => b.startTimeInSeconds - a.startTimeInSeconds);
-      return `<tr data-record-runner="${esc(r.ownerId)}" style="cursor:pointer">
-        <td class="gs-rank">${medal(i)}</td>
-        <td><span class="runner-cell" data-profile="${esc(r.ownerId)}">${runnerAvatarHtml({ ...runner, id: r.ownerId }, true)}<span class="runner-name">${esc(runner.name)}</span></span>${recent(r.startTimeInSeconds) ? '<span class="rec-badge">NEW</span>' : ""}</td>
-        <td><b>${fmtDur(r.seconds)}</b></td>
-        <td>${fmtPace(r.seconds / distKm(r))}</td>
-        <td>${recDate(r.startTimeInSeconds)} <span class="gs-caret">${open ? "▾" : "▸"}</span></td>
-      </tr>` + (open ? `<tr><td></td><td colspan="4"><div class="rec-history">${history.map(h => `<div class="rec-history-row" data-open-activity="${esc(h.activityId)}">
-          <span>${recDate(h.startTimeInSeconds)}</span><b>${fmtDur(h.seconds)}</b>
-          <span class="gs-session-meta">${h.distanceInMeters ? (h.distanceInMeters / 1000).toFixed(2) + " km" : ""}</span>
-        </div>`).join("")}</div></td></tr>` : "");
-    }).join("") + `</tbody></table>`;
-}
-document.getElementById("recordsToggle").addEventListener("click", () => {
-  try { localStorage.setItem("recordsCardHidden", recordsCardHidden() ? "0" : "1"); } catch { }
-  renderRecords();
-});
-document.getElementById("recordsBody").addEventListener("click", e => {
-  const hist = e.target.closest("[data-open-activity]");
-  if (hist) { openDetail(hist.dataset.openActivity); return; }
-  const row = e.target.closest("[data-record-runner]");
-  if (!row) return;
-  const id = row.dataset.recordRunner;
-  recordsOpen.has(id) ? recordsOpen.delete(id) : recordsOpen.add(id);
-  renderRecords();
-});
 
 /* ---------- Group sessions: detected automatically from the runs themselves ----------
    A block = 3+ different runners whose runs started within 5 min of each other and cover about the
@@ -2183,7 +2118,7 @@ document.body.addEventListener("click", e => {
   btn.textContent = minimized ? "Expand" : "Minimize";
 }, true);
 
-function renderAll() { renderRunnerFilters(); renderProfileLink(); renderWeekNav(); renderHighlights(); renderRaces(); renderRecords(); renderGroupSessions(); renderTiles(); renderBars(); renderSleep(); renderPlan(); renderWeekday(); renderFeed(); }
+function renderAll() { renderRunnerFilters(); renderProfileLink(); renderWeekNav(); renderHighlights(); renderRaces(); renderGroupSessions(); renderTiles(); renderBars(); renderSleep(); renderPlan(); renderWeekday(); renderFeed(); }
 
 document.querySelectorAll('.filters[aria-label="Time range"] button').forEach(btn => {
   btn.addEventListener("click", () => {
