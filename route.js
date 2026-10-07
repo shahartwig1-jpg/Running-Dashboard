@@ -42,4 +42,23 @@ function routeFromStreams(raw) {
   return s ? buildRoute(s.data, s.data2) : [];
 }
 
-module.exports = { buildRoute, routeFromStreams };
+// A tiny fingerprint of a route (SIG_POINTS evenly spaced points, ~11 m precision). The dashboard loads
+// one per run to check that runners in a "group session" really ran the same route.
+const SIG_POINTS = 12;
+function routeSignature(route) {
+  if (!route || route.length < 2) return [];
+  const out = [];
+  for (let i = 0; i < SIG_POINTS; i++) {
+    const p = route[Math.round(i * (route.length - 1) / (SIG_POINTS - 1))];
+    out.push([Math.round(p[0] * 1e4) / 1e4, Math.round(p[1] * 1e4) / 1e4]);
+  }
+  return out;
+}
+
+// Both fields stored next to a run's laps/streams.
+function routeFields(raw) {
+  const route = routeFromStreams(raw);
+  return { route, sig: routeSignature(route) };
+}
+
+module.exports = { buildRoute, routeFromStreams, routeSignature, routeFields, haversine };

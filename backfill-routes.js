@@ -1,9 +1,10 @@
-// One-off: adds the map route (see route.js) to runs whose stored details don't have one yet.
-// New runs get theirs from fetch-data.js automatically; this only catches up the existing ones.
-// Safe to re-run: runs that already have a `route` are skipped. Usage:  node backfill-routes.js [--dry]
+// One-off: adds the map route and the route fingerprint (see route.js) to runs whose stored details don't
+// have them yet. New runs get theirs from fetch-data.js automatically; this only catches up the existing ones.
+// A run that has a route but no fingerprint is finished from the saved route, without asking Intervals.icu.
+// Safe to re-run: runs that already have both are skipped. Usage:  node backfill-routes.js [--dry]
 const fs = require("fs");
 const path = require("path");
-const { routeFromStreams } = require("./route");
+const { routeFields, routeSignature } = require("./route");
 
 const DRY = process.argv.includes("--dry");
 const read = f => (fs.existsSync(path.join(__dirname, f)) ? fs.readFileSync(path.join(__dirname, f), "utf8").trim() : "");
@@ -37,7 +38,7 @@ async function streamsFor(apiKey, id) {
   const todo = [];
   for (let off = 0; ; off += 100) {
     const page = await supaGet(`activity_details?select=activityId,streams&order=activityId&limit=100&offset=${off}`);
-    for (const row of page) if (row.streams && !("route" in row.streams) && owners[row.activityId]) todo.push(row);
+    for (const row of page) if (row.streams && !("sig" in row.streams) && owners[row.activityId]) todo.push(row);
     if (page.length < 100) break;
   }
   console.log(`${todo.length} run(s) need a route${DRY ? " (dry run, nothing will be written)" : ""}`);
@@ -46,13 +47,17 @@ async function streamsFor(apiKey, id) {
     while (i < todo.length) {
       const row = todo[i++];
       try {
-        const route = routeFromStreams(await streamsFor(keyByOwner[owners[row.activityId]] || coachKey, row.activityId));
-        if (route.length) withMap++;
+        const hasRoute = Array.isArray(row.streams.route);
+        const fields = hasRoute
+          ? { route: row.streams.route, sig: routeSignature(row.streams.route) }
+          : routeFields(await streamsFor(keyByOwner[owners[row.activityId]] || coachKey, row.activityId));
+        if (fields.route.length) withMap++;
         if (!DRY) {
-          const r = await supa("PATCH", `activity_details?activityId=eq.${encodeURIComponent(row.activityId)}`, { streams: { ...row.streams, route } });
+          const r = await supa("PATCH", `activity_details?activityId=eq.${encodeURIComponent(row.activityId)}`, { streams: { ...row.streams, ...fields } });
           if (!r.ok) throw new Error(`save -> ${r.status}`);
         }
         done++;
+        if (hasRoute) continue; // no API call was made, so no need to pause
       } catch (e) { failed++; console.error(`  ${row.activityId}: ${e.message}`); }
       if ((done + failed) % 50 === 0) console.log(`  ...${done + failed}/${todo.length}`);
       await sleep(400);

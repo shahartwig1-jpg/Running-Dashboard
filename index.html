@@ -1462,6 +1462,30 @@ const blockLabel = b => BLOCK_ROLE_LABEL[b.role] || (b.session.blocks.length ===
 const blockKey = b => b.session.id + ":" + b.index;
 const groupBlockOverride = new Map(); // block key -> true/false once the user toggled it
 const blockOpen = b => groupBlockOverride.has(blockKey(b)) ? groupBlockOverride.get(blockKey(b)) : b.role !== "warmup" && b.role !== "cooldown";
+// Route fingerprints (12 points per run, saved by route.js): runners who really ran together are within ~100 m of
+// each other on average; the closest "different loop in the same town" we measured was 742 m. 250 m sits between.
+let ROUTE_SIGS = {}; // activityId -> [[lat,lng] x 12]
+const GROUP_ROUTE_TOL_M = 250;
+function haversineM(a, b) {
+  const R = 6371000, rad = Math.PI / 180, dLat = (b[0] - a[0]) * rad, dLng = (b[1] - a[1]) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * rad) * Math.cos(b[0] * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.sqrt(h));
+}
+function sigDistanceM(a, b) { // mean gap between the two routes, in either running direction
+  const mean = (x, y) => x.reduce((t, p, i) => t + haversineM(p, y[i]), 0) / x.length;
+  return Math.min(mean(a, b), mean(a, b.slice().reverse()));
+}
+// Keeps the runners whose GPS route matches the rest of the block. Needs 3+ routes to judge (otherwise the
+// time + distance verdict stands), and a runner with no GPS is given the benefit of the doubt.
+function confirmSameRoute(members) {
+  const withSig = members.filter(m => ROUTE_SIGS[m.activityId]?.length);
+  if (withSig.length < 3) return { members, confirmed: false };
+  const total = m => withSig.reduce((t, o) => t + (o === m ? 0 : sigDistanceM(ROUTE_SIGS[m.activityId], ROUTE_SIGS[o.activityId])), 0);
+  const centre = withSig.reduce((best, m) => (best === null || total(m) < total(best)) ? m : best, null); // the route closest to everyone else's
+  const ok = new Set(withSig.filter(m => m === centre || sigDistanceM(ROUTE_SIGS[m.activityId], ROUTE_SIGS[centre.activityId]) <= GROUP_ROUTE_TOL_M).map(m => m.activityId));
+  return { members: members.filter(m => !ROUTE_SIGS[m.activityId]?.length || ok.has(m.activityId)), confirmed: true };
+}
+
 let groupCache = { src: null, len: -1, sessions: [] };
 const paceOf = a => a.durationInSeconds / km(a);
 
@@ -1484,6 +1508,9 @@ function groupSessions() {
   }
 
   const blocks = open.filter(b => b.members.length >= GROUP_MIN_RUNNERS).map(b => {
+    const check = confirmSameRoute(b.members);
+    return { ...b, members: check.members, confirmed: check.confirmed, distSum: check.members.reduce((t, m) => t + m.distanceInMeters, 0) };
+  }).filter(b => b.members.length >= GROUP_MIN_RUNNERS).map(b => {
     const members = b.members.slice().sort((x, y) => paceOf(x) - paceOf(y));
     const inBlock = new Set(members.map(m => m.ownerId));
     // Runners who set off with the group but covered a different distance (e.g. stopped early).
@@ -1493,7 +1520,7 @@ function groupSessions() {
       seen.add(a.ownerId); others.push(a);
     }
     return {
-      start: b.start, members, others, avgKm: b.distSum / b.members.length / 1000,
+      start: b.start, members, others, confirmed: b.confirmed, avgKm: b.distSum / b.members.length / 1000,
       end: Math.max(...members.map(m => m.startTimeInSeconds + m.durationInSeconds)),
     };
   }).sort((x, y) => x.start - y.start);
@@ -1585,7 +1612,7 @@ function renderGroupSessions() {
       const bOpen = blockOpen(b);
       return `<div class="gs-block">
       <button class="gs-block-title${b.role === "main" ? " main" : ""}" type="button" data-block="${esc(blockKey(b))}" aria-expanded="${bOpen}">
-        <span class="gs-caret">${bOpen ? "▾" : "▸"}</span>${esc(blockLabel(b))} · ${fmtKm(b.avgKm)} km · ${b.members.length} runners
+        <span class="gs-caret">${bOpen ? "▾" : "▸"}</span>${esc(blockLabel(b))} · ${fmtKm(b.avgKm)} km · ${b.members.length} runners${b.confirmed ? ' · <span title="Their GPS routes match">✓ same route</span>' : ''}
       </button>
       ${bOpen ? groupTableHtml(b.members) + othersHtml(b) + `<button class="week-nav-btn gs-route-btn" type="button" data-route-block="${esc(blockKey(b))}" style="margin-top:8px;">🗺 ${groupRoutesOpen.has(blockKey(b)) ? "Hide route" : "Show route"}</button><div class="route-map" data-route-map="${esc(blockKey(b))}" hidden style="margin-top:8px;"></div>` : ""}
     </div>`;
@@ -2612,7 +2639,7 @@ async function loadFromSupabase(accessToken) {
   const cutoffSec = Math.floor(Date.now() / 1000) - 90 * 86400;
   const cutoffDate = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
 
-  const [runnersRaw, activitiesRaw, sleepRaw, planRaw, highlightsRaw, racesRaw, rolesRaw, recordsRaw, profilesRaw, myRunnerId] = await Promise.all([
+  const [runnersRaw, activitiesRaw, sleepRaw, planRaw, highlightsRaw, racesRaw, rolesRaw, recordsRaw, profilesRaw, myRunnerId, sigsRaw] = await Promise.all([
     supaGet(`runners?select=id,name,device&order=id`, accessToken),
     supaGet(`activities?select=*&startTimeInSeconds=gte.${cutoffSec}&order=startTimeInSeconds.desc`, accessToken),
     supaGet(`sleep?select=*&date=gte.${cutoffDate}`, accessToken),
@@ -2625,10 +2652,13 @@ async function loadFromSupabase(accessToken) {
     supaGet(`records?select=ownerId,distance,seconds,distanceInMeters,activityId,startTimeInSeconds,previousSeconds`, accessToken).catch(() => []), // records.sql not run yet -> no badges, nothing breaks
     supaGet(`profiles?select=ownerId,photoUrl`, accessToken).catch(() => []), // profiles.sql not run yet -> initials, nothing breaks
     supaRpc("my_runner_id", accessToken).catch(() => null),
+    supaGet(`activity_details?select=activityId,sig:streams->sig&fetchedAt=gte.${cutoffDate}&order=fetchedAt.desc&limit=1000`, accessToken).catch(() => []),
   ]);
 
   RUNNERS = runnersRaw.map((r, i) => ({ ...r, slot: (i % 12) + 1 }));
   setRecords(recordsRaw);
+  ROUTE_SIGS = Object.fromEntries(sigsRaw.filter(r => Array.isArray(r.sig) && r.sig.length).map(r => [r.activityId, r.sig]));
+  groupCache = { src: null, len: -1, sessions: [] }; // fingerprints arrived: detection must run again
   PROFILES = Object.fromEntries(profilesRaw.map(p => [p.ownerId, p]));
   MY_RUNNER_ID = typeof myRunnerId === "string" ? myRunnerId : null;
   // Only overwrite the hardcoded fallback once roles.sql has actually been run and seeded —

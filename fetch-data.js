@@ -10,7 +10,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { routeFromStreams } = require("./route");
+const { routeFields } = require("./route");
 const supa = require("./supabase");
 
 const BASE = "https://intervals.icu/api/v1";
@@ -148,7 +148,7 @@ function normalizeStreams(raw) {
     // pace, not raw speed, is what a runner reads — convert here so the dashboard doesn't have to.
     paceSecPerKm: (byType.velocity_smooth || []).map(v => (v > 0.3 ? Math.round(1000 / v) : null)),
     // GPS route for the map: privacy-trimmed and thinned out (see route.js). [] when the run has no GPS.
-    route: routeFromStreams(raw),
+    ...routeFields(raw), // route + sig, see route.js
   };
 }
 
