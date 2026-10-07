@@ -228,8 +228,15 @@
   .feed-name { font-weight: 600; font-size: 13px; }
   .feed-time { font-size: 11px; color: var(--text-muted); }
   .feed-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
-  .feed-stats { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
-  .feed-stats b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .feed-body { display: flex; align-items: center; gap: 14px; margin: 6px 0 10px; }
+  .feed-metrics { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .fm-main b { font-size: 36px; font-weight: 800; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .fm-main span { font-size: 15px; font-weight: 600; color: var(--text-muted); }
+  .fm-row { display: flex; flex-wrap: wrap; gap: 6px 22px; }
+  .fm b { display: block; font-size: 21px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .fm small { font-size: 10px; letter-spacing: 0.07em; color: var(--text-muted); }
+  .fm-sub { font-size: 12px; color: var(--text-secondary); }
+  .fm-group { font-size: 12px; font-weight: 600; color: var(--series-1); }
   .photo-wrap { position: relative; margin-bottom: 8px; }
   .photo-wrap.minimized { display: flex; justify-content: flex-end; }
   .photo-wrap img {
@@ -391,11 +398,12 @@
   .profile-name { font-size: 18px; font-weight: 700; }
   .profile-edit { margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .route-map { height: 260px; border-radius: 10px; overflow: hidden; isolation: isolate; background: var(--grid); }
-  .route-map .leaflet-control-attribution { font-size: 10px; }
-  .feed-map { height: 190px; margin: 2px 0 10px; }
+  .route-map .leaflet-control-attribution { font-size: 9px; padding: 0 4px; }
+  .route-map .leaflet-tile { filter: grayscale(1) brightness(1.06) contrast(0.9); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .route-map .leaflet-tile { filter: grayscale(1) invert(1) brightness(0.95) contrast(0.85); } }
+  :root[data-theme="dark"] .route-map .leaflet-tile { filter: grayscale(1) invert(1) brightness(0.95) contrast(0.85); }
+  .feed-map { flex: 0 0 42%; height: 170px; margin: 0; }
   .feed-map, .feed-map * { pointer-events: none !important; }
-  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .route-map .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9); } }
-  :root[data-theme="dark"] .route-map .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9); }
   .idle-note { font-size: 12px; color: var(--text-muted); margin-top: 10px; }
   .rec-history { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 6px; }
   .rec-history-row { display: flex; align-items: baseline; gap: 12px; font-size: 12px; padding: 4px 6px; border-radius: 6px; cursor: pointer; font-variant-numeric: tabular-nums; }
@@ -1371,14 +1379,18 @@ function renderFeed() {
           <span class="feed-time">${fmtDate(a.startTimeInSeconds)}</span>
         </div>
         <div class="feed-title">${esc(a.activityName) || "Run"}${recordBadgeHtml(a.activityId)}</div>
-        <div class="feed-stats">
-          <span><b>${fmtKm(km(a))}</b> km</span>
-          <span><b>${fmtDur(a.durationInSeconds)}</b></span>
-          <span><b>${fmtPace(pace)}</b> min/km</span>
-          <span><b>${a.averageHeartRateInBeatsPerMinute ?? "-"}</b> bpm</span>
-          <span class="device">${esc(a.deviceName)}</span>
+        <div class="feed-body">
+          <div class="route-map feed-map" data-feed-map="${esc(a.activityId)}" hidden></div>
+          <div class="feed-metrics">
+            <div class="fm-main"><b>${fmtKm(km(a))}</b><span> km</span></div>
+            <div class="fm-row">
+              <div class="fm"><b>${fmtDur(a.durationInSeconds)}</b><small>TIME</small></div>
+              <div class="fm"><b>${fmtPace(pace)}</b><small>PACE /KM</small></div>
+            </div>
+            <div class="fm-sub">❤ ${a.averageHeartRateInBeatsPerMinute ?? "-"} bpm<span class="device"> · ${esc(a.deviceName)}</span></div>
+            ${groupTagHtml(a)}
+          </div>
         </div>
-        <div class="route-map feed-map" data-feed-map="${esc(a.activityId)}" hidden></div>
         <div class="photo-wrap" data-photo-wrap-for="${esc(a.activityId)}" style="display:none">
           <button class="photo-toggle-btn" type="button">Minimize</button>
           <img class="feed-photo" data-photo-for="${esc(a.activityId)}">
@@ -1608,6 +1620,14 @@ const groupTableHtml = (members, highlightId) => `<table class="gs-table"><thead
 function othersHtml(b) {
   if (!b.others.length) return "";
   return `<div class="gs-others">Also started with the group: ${b.others.map(a => `${esc((runnerById(a.ownerId) || { name: a.ownerId }).name)} (${fmtKm(km(a))} km, ${fmtDur(a.durationInSeconds)})`).join(" · ")}</div>`;
+}
+
+// "Main set · 1st of 6" on a run that belongs to a detected group session.
+function groupTagHtml(a) {
+  const b = findGroupBlock(a.activityId);
+  if (!b) return "";
+  const i = b.members.findIndex(m => String(m.activityId) === String(a.activityId));
+  return `<div class="fm-group">👥 ${esc(blockLabel(b))} · ${i >= 0 ? rankWord(i + 1) + " of " + b.members.length : "with the group"}</div>`;
 }
 
 function renderGroupSessions() {
@@ -1889,11 +1909,13 @@ async function drawRouteMap(el, route, opts = {}) {
   try {
     const L = await loadLeaflet();
     const map = L.map(el, opts.mini
-      ? { zoomControl: false, dragging: false, touchZoom: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false }
-      : { scrollWheelZoom: false });
+      ? { attributionControl: false, zoomControl: false, dragging: false, touchZoom: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false }
+      : { attributionControl: false, scrollWheelZoom: false });
     el._routeMap = map;
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap contributors" }).addTo(map);
-    const line = L.polyline(route, { color: "#2a78d6", weight: 4, opacity: 0.95 }).addTo(map);
+    // OpenStreetMap tiles, toned down to greyscale in CSS (see .route-map .leaflet-tile) so the route stands out.
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
+    L.control.attribution({ prefix: false }).addAttribution(opts.mini ? "© OSM" : '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors').addTo(map);
+    const line = L.polyline(route, { color: "#fc4c02", weight: 4, opacity: 0.95 }).addTo(map);
     const dot = opts.mini ? 4 : 6;
     L.circleMarker(route[0], { radius: dot, color: "#fff", weight: 2, fillColor: "#1baf7a", fillOpacity: 1 }).addTo(map);
     L.circleMarker(route[route.length - 1], { radius: dot, color: "#fff", weight: 2, fillColor: "#e34948", fillOpacity: 1 }).addTo(map);
