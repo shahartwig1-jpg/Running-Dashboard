@@ -1830,40 +1830,44 @@ function openProfile(ownerId) {
 }
 
 // Shrinks the picked photo (phones take multi-MB pictures) to a 640 px JPEG before uploading.
-function shrinkImage(file, maxSide = 640) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
-      const c = document.createElement("canvas");
-      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
-      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-      URL.revokeObjectURL(img.src);
-      c.toBlob(b => b ? resolve(b) : reject(new Error("could not encode photo")), "image/jpeg", 0.88);
-    };
-    img.onerror = () => reject(new Error("could not read photo"));
-    img.src = URL.createObjectURL(file);
-  });
+async function shrinkImage(file, maxSide = 640) {
+  let bmp;
+  try { bmp = await createImageBitmap(file, { imageOrientation: "from-image" }); } // respects the phone's rotation flag
+  catch { throw new Error("unreadable"); } // e.g. a HEIC picture in a browser that can't open it
+  const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  bmp.close?.();
+  return new Promise((resolve, reject) => c.toBlob(blob => blob ? resolve(blob) : reject(new Error("unreadable")), "image/jpeg", 0.88));
 }
 async function changeProfilePhoto(ownerId, file) {
   if (!file) return;
   const status = document.getElementById("profilePhotoStatus");
   const token = getSession()?.access_token;
   status.textContent = "Uploading…";
+  let stage = "reading";
   try {
     const blob = await shrinkImage(file);
+    stage = "uploading";
     const path = `${ownerId}/${Date.now()}.jpg`;
     const up = await fetch(`${SUPABASE_URL}/storage/v1/object/profile-photos/${path}`, {
       method: "POST", headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "image/jpeg" }, body: blob,
     });
-    if (!up.ok) throw new Error("upload refused");
+    if (!up.ok) throw new Error(`${up.status} ${(await up.text().catch(() => "")).slice(0, 160)}`);
+    stage = "saving";
     const photoUrl = `${SUPABASE_URL}/storage/v1/object/public/profile-photos/${path}`;
     await supaUpsert("profiles", [{ ownerId, photoUrl, updatedAt: new Date().toISOString() }], "ownerId", token);
     PROFILES[ownerId] = { photoUrl };
     renderAll();
     openProfile(ownerId);
-  } catch {
-    status.textContent = "Couldn't save the photo. Your login may not be linked to this runner yet — ask the coach.";
+  } catch (e) {
+    console.error("profile photo failed while", stage, e);
+    status.textContent = stage === "reading"
+      ? "This picture couldn't be read. Try a JPG or PNG."
+      : stage === "uploading"
+        ? `The upload was refused (${e.message}). Your login may not be linked to this runner.`
+        : `The picture uploaded but couldn't be saved to the profile (${e.message}).`;
   }
 }
 
@@ -2484,7 +2488,7 @@ async function supaUpsert(table, rows, onConflict, accessToken) {
     },
     body: JSON.stringify(rows),
   });
-  if (!res.ok) throw new Error("Supabase upsert failed: " + table);
+  if (!res.ok) throw new Error(`${res.status} ${(await res.text().catch(() => "")).slice(0, 160)}`);
 }
 
 async function supaDelete(pathWithQuery, accessToken) {
