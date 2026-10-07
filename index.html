@@ -29,6 +29,10 @@
     --series-6: #e34948;
     --series-7: #d6368f;
     --series-8: #1a9ba8;
+    --series-9: #7a8f1c;
+    --series-10: #e8743b;
+    --series-11: #8a5a3c;
+    --series-12: #5b6b8c;
     --good:           #006300;
     --bg-glow-1: rgba(42,120,214,0.10);
     --bg-glow-2: rgba(27,175,122,0.09);
@@ -53,6 +57,10 @@
       --series-6: #e66767;
       --series-7: #e667c0;
       --series-8: #34c3d1;
+      --series-9: #a3b83a;
+      --series-10: #f0905c;
+      --series-11: #b88565;
+      --series-12: #8a9bc0;
       --good:           #0ca30c;
       --bg-glow-1: rgba(57,135,229,0.14);
       --bg-glow-2: rgba(25,158,112,0.12);
@@ -77,6 +85,10 @@
     --series-6: #e66767;
     --series-7: #e667c0;
     --series-8: #34c3d1;
+    --series-9: #a3b83a;
+    --series-10: #f0905c;
+    --series-11: #b88565;
+    --series-12: #8a9bc0;
     --good:           #0ca30c;
     --bg-glow-1: rgba(57,135,229,0.14);
     --bg-glow-2: rgba(25,158,112,0.12);
@@ -147,6 +159,12 @@
   .filters button[aria-pressed="true"]::before { content: "✓ "; font-weight: 700; }
   .filters button .chip { vertical-align: -1px; margin-inline-end: 5px; }
   .filters { flex-wrap: wrap; }
+  @media (max-width: 600px) {
+    #runnerFilters { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px;
+      -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent); mask-image: linear-gradient(90deg, #000 88%, transparent); }
+    #runnerFilters::-webkit-scrollbar { display: none; }
+    #runnerFilters button { flex: 0 0 auto; white-space: nowrap; }
+  }
 
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
   .tile {
@@ -372,6 +390,7 @@
   .profile-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
   .profile-name { font-size: 18px; font-weight: 700; }
   .profile-edit { margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .idle-note { font-size: 12px; color: var(--text-muted); margin-top: 10px; }
   .rec-history { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 6px; }
   .rec-history-row { display: flex; align-items: baseline; gap: 12px; font-size: 12px; padding: 4px 6px; border-radius: 6px; cursor: pointer; font-variant-numeric: tabular-nums; }
   .rec-history-row:hover { background: var(--grid); }
@@ -740,6 +759,7 @@ let selectedRunnerId = null; // null = everyone
 // same weekBounds()/thisWeekActs() — one nav control for "the general weekly runs" and
 // "the personal" (per-runner) view alike, so a coach can page both back in lockstep.
 let weekOffset = 0;
+let highlightFormOpen = false; // the "share a highlight" form stays folded away until asked for
 // How many weeks back "Recent activities" shows for the selected runner, growing one week
 // at a time via the "Load previous week" button — deliberately separate from weekOffset so
 // scrolling a runner's history doesn't drag the weekly charts/highlights along with it.
@@ -832,12 +852,21 @@ function renderHighlights() {
       </div>
       <div class="highlight-text">${esc(h.description)}</div>
       ${photoGallery(h)}
-    </div>`).join("") : `<div class="empty-note">No highlight posted for this week yet</div>`;
+    </div>`).join("") : "";
 
   const submitEl = document.getElementById("highlightSubmit");
   const session = getSession();
-  if (!session?.access_token) {
-    submitEl.innerHTML = `<div class="empty-note" style="margin-top:10px;">Log in (top of the page) to submit a highlight.</div>`;
+  // An empty card at the very top of the page pushes the real content down. Visitors who can't post see
+  // nothing; members see one line and a button, and the form only opens on request.
+  const hasContent = approved.length > 0 || pending.length > 0;
+  const card = document.getElementById("highlightCard");
+  if (!hasContent && !session?.access_token) { card.style.display = "none"; return; }
+  card.style.display = "";
+  if (!hasContent) document.getElementById("highlightSub").textContent = "Nothing shared this week yet";
+  if (!session?.access_token) { submitEl.innerHTML = ""; return; }
+  if (!highlightFormOpen) {
+    submitEl.innerHTML = `<button id="highlightOpenBtn" class="week-nav-btn" type="button" style="margin-top:${hasContent ? 12 : 0}px;">+ Share a highlight</button>`;
+    document.getElementById("highlightOpenBtn").addEventListener("click", () => { highlightFormOpen = true; renderHighlights(); });
     return;
   }
   submitEl.innerHTML = `
@@ -890,6 +919,7 @@ function renderRaces() {
   const upcoming = RACES.filter(r => r.date >= todayStr).sort((a, b) => a.date.localeCompare(b.date));
   const fmtRaceDate = iso => new Date(iso + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 
+  document.getElementById("racesCard").style.display = (upcoming.length || isCoach()) ? "" : "none";
   document.getElementById("racesList").innerHTML = upcoming.length ? upcoming.map(r => {
     const attendees = r.race_rsvps || [];
     const imIn = me !== null && attendees.some(a => a.authorName === me);
@@ -1021,12 +1051,14 @@ function renderBars() {
   document.getElementById("barSub").textContent =
     `${fmtDateEn(wStart)} – ${fmtDateEn(wEnd)}` + (weekOffset === 0 ? " (this week)" : "");
   const el = document.getElementById("barChart");
-  el.innerHTML = per.map(p => `
+  const idle = per.filter(p => p.kmSum === 0);
+  const active = idle.length === per.length ? per : per.filter(p => p.kmSum > 0);
+  el.innerHTML = active.map(p => `
     <div class="bar-row" data-id="${p.r.id}">
       <div class="bar-name"><span class="chip" style="background:${colorOf(p.r)}"></span>${esc(p.r.name)}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${(p.kmSum / max * 100).toFixed(1)}%;background:${colorOf(p.r)}"></div></div>
       <div class="bar-val">${fmtKm(p.kmSum)} km</div>
-    </div>`).join("");
+    </div>`).join("") + (active.length < per.length ? `<div class="idle-note">No runs yet this week: ${idle.map(p => esc(p.r.name)).join(", ")}</div>` : "");
   el.querySelectorAll(".bar-row").forEach(row => {
     const p = per.find(x => x.r.id === row.dataset.id);
     row.addEventListener("mousemove", e => showTip(
@@ -1064,12 +1096,13 @@ function renderSleep() {
     return;
   }
   const max = Math.max(...per.map(p => p.avgHours || 0), 1);
-  el.innerHTML = per.map(p => `
+  const noSleep = per.filter(p => p.avgHours == null);
+  el.innerHTML = per.filter(p => p.avgHours != null).map(p => `
     <div class="bar-row">
       <div class="bar-name"><span class="chip" style="background:${colorOf(p.r)}"></span>${esc(p.r.name)}</div>
       <div class="bar-track">${p.avgHours != null ? `<div class="bar-fill" style="width:${(p.avgHours / max * 100).toFixed(1)}%;background:${colorOf(p.r)}"></div>` : ""}</div>
-      <div class="bar-val">${p.avgHours != null ? fmtHoursMin(p.avgHours) : "No data"}</div>
-    </div>`).join("");
+      <div class="bar-val">${fmtHoursMin(p.avgHours)}</div>
+    </div>`).join("") + (noSleep.length && selectedRunnerId === null ? `<div class="idle-note">No sleep data: ${noSleep.map(p => esc(p.r.name)).join(", ")}</div>` : "");
 }
 
 function renderPlan() {
@@ -1082,9 +1115,7 @@ function renderPlan() {
   if (selectedRunnerId === null) {
     editBtn.style.display = "none"; // the per-runner Edit/Cancel toggle doesn't apply here
     if (!isCoach()) {
-      sub.textContent = "Select a runner above to see their plan";
-      el.innerHTML = `<div class="empty-note">The plan is personal to each runner — pick a name from the list above</div>`;
-      prevBtn.disabled = true; nextBtn.disabled = true;
+      card.style.display = "none"; // plans are personal: nothing to show until a runner is picked
       return;
     }
     // Coach + "All" selected: instead of one runner's grid, offer a bulk tool — the same
@@ -2168,7 +2199,7 @@ async function loadReal() {
   } catch { return false; }
   if (!d || !Array.isArray(d.activities) || !d.activities.length) return false;
 
-  RUNNERS = d.runners;
+  RUNNERS = d.runners.map((r, i) => ({ ...r, slot: (i % 12) + 1 }));
   ACTIVITIES = d.activities.slice().sort((a, b) => b.startTimeInSeconds - a.startTimeInSeconds);
   SLEEP = Array.isArray(d.sleep) ? d.sleep : [];
   PLAN_HISTORY = d.planHistory && typeof d.planHistory === "object" ? d.planHistory : {};
@@ -2514,7 +2545,7 @@ async function loadFromSupabase(accessToken) {
     supaRpc("my_runner_id", accessToken).catch(() => null),
   ]);
 
-  RUNNERS = runnersRaw.map((r, i) => ({ ...r, slot: (i % 8) + 1 }));
+  RUNNERS = runnersRaw.map((r, i) => ({ ...r, slot: (i % 12) + 1 }));
   setRecords(recordsRaw);
   PROFILES = Object.fromEntries(profilesRaw.map(p => [p.ownerId, p]));
   MY_RUNNER_ID = typeof myRunnerId === "string" ? myRunnerId : null;
