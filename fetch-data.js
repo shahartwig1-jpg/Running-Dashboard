@@ -109,9 +109,12 @@ const isRun = a => /run/i.test(a.activityType || "");
 
 /* Intervals.icu's wellness record carries a lot more than sleep (mood, stress,
    bodyFat, bloodGlucose, menstrualPhase, ...). Teammates agreed to share running
-   data, not that — so only these four fields are ever read off the response. */
+   data, not that — so only the four sleep fields and the day's step count are ever
+   read off the response. */
+const stepRows = []; // { ownerId, date, steps } for every runner-day that has a step count
 async function fetchWellness(apiKey, athleteId, oldest, newest) {
   const raw = await call(apiKey, `/athlete/${athleteId}/wellness?oldest=${oldest}&newest=${newest}`);
+  for (const r of raw) if (Number.isFinite(r.steps) && r.steps > 0) stepRows.push({ ownerId: String(athleteId), date: r.id, steps: Math.round(r.steps) });
   return raw
     .filter(r => r.sleepSecs != null || r.sleepScore != null || r.sleepQuality != null || r.avgSleepingHR != null)
     .map(r => ({
@@ -345,6 +348,9 @@ async function fetchAll(cfg) {
       sleepQuality: s.sleepQuality, avgSleepingHR: s.avgSleepingHR, fetchedAt,
     })));
   }
+  // Daily step counts for the home page's "Daily steps" graph (supabase/daily_steps.sql). Like records, never allowed to fail the sync.
+  try { if (stepRows.length) await require("./steps").saveSteps(stepRows); }
+  catch (e) { console.error(`Steps skipped (${e.message}) — has supabase/daily_steps.sql been run?`); }
   if (newRuns.length) await notifyNewRuns(newRuns);
   // Save any new personal records (supabase/records.sql). Never lets a missing table or a hiccup fail the sync.
   try { await require("./records").updateRecords(); }

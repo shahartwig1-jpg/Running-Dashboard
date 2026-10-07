@@ -124,7 +124,7 @@
   .jump-nav::-webkit-scrollbar { display: none; }
   .jump-nav button { flex: 0 0 auto; font: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--text-secondary); background: none; border: 1px solid var(--border); border-radius: 999px; padding: 5px 13px; cursor: pointer; }
   .jump-nav button:hover { color: var(--accent); border-color: var(--accent); }
-  #tiles, #groupCard, #trendCard, #planCard, #racesCard, #feedCard, #highlightCard { scroll-margin-top: 56px; }
+  #tiles, #groupCard, #stepsCard, #planCard, #racesCard, #feedCard, #highlightCard { scroll-margin-top: 56px; }
   .filters { display: flex; gap: 8px; margin-bottom: 18px; }
   .filters button {
     font: inherit; font-size: 13px; cursor: pointer;
@@ -578,10 +578,10 @@
       <div class="sub" id="barSub"></div>
       <div id="barChart"></div>
     </div>
-    <div class="card" id="trendCard">
-      <h2>Weekly distance</h2>
-      <div class="sub" id="trendSub"></div>
-      <div id="trendChart"></div>
+    <div class="card" id="stepsCard">
+      <h2>Daily steps</h2>
+      <div class="sub" id="stepsSub"></div>
+      <div id="stepsChart"></div>
     </div>
   </div>
 
@@ -660,6 +660,7 @@ let TODAY = new Date(2026, 6, 15, 12, 0, 0); // demo reference date
 let WEEKS = [];
 let ACTIVITIES = [];
 let SLEEP = [];
+let STEPS = []; // daily_steps rows: { ownerId, date, steps } (empty until supabase/daily_steps.sql is run and a sync has filled it)
 let PLAN_HISTORY = {}; // ownerId -> { weekStartISO -> array of 7 day strings (Sun -> Sat) }
 let planWeekOffset = 0; // 0 = this week, -1 = last week, etc. — reset to 0 whenever the runner selection changes
 let planEditing = false; // reset to false whenever the runner/week changes, see below
@@ -764,6 +765,7 @@ let selectedRunnerId = null; // null = everyone
 // same weekBounds()/thisWeekActs() — one nav control for "the general weekly runs" and
 // "the personal" (per-runner) view alike, so a coach can page both back in lockstep.
 let weekOffset = 0;
+let sharedWorkoutOpen = false; // the coach's bulk "shared workout" form stays folded away until asked for
 let highlightFormOpen = false; // the "share a highlight" form stays folded away until asked for
 // How many weeks back "Recent activities" shows for the selected runner, growing one week
 // at a time via the "Load previous week" button — deliberately separate from weekOffset so
@@ -1095,6 +1097,13 @@ function renderPlan() {
     // runner editor once per person.
     prevBtn.disabled = false;
     nextBtn.disabled = false; // unlike activity data, plans are written in advance — future weeks are valid
+    prevBtn.style.display = nextBtn.style.display = sharedWorkoutOpen ? "" : "none";
+    if (!sharedWorkoutOpen) { // an empty form takes a whole screen of space: one line and a button instead
+      sub.textContent = "Set one workout for several runners at once";
+      el.innerHTML = `<button id="sharedWorkoutOpen" class="week-nav-btn" type="button">+ Add a shared workout</button>`;
+      document.getElementById("sharedWorkoutOpen").addEventListener("click", () => { sharedWorkoutOpen = true; renderPlan(); });
+      return;
+    }
     const start = new Date(weekStart(TODAY).getTime() + planWeekOffset * 7 * DAY);
     const weekStartStr = start.toISOString().slice(0, 10);
     const weekEnd = new Date(start.getTime() + 6 * DAY);
@@ -1102,6 +1111,7 @@ function renderPlan() {
     renderSharedWorkoutTool(el, weekStartStr, start);
     return;
   }
+  prevBtn.style.display = nextBtn.style.display = "";
   prevBtn.disabled = false;
   nextBtn.disabled = false; // unlike activity data, plans are written in advance — future weeks are valid
   editBtn.style.display = isCoach() ? "" : "none";
@@ -1199,9 +1209,11 @@ function renderSharedWorkoutTool(el, weekStartStr, start) {
     </div>
     <div class="plan-edit-actions">
       <button id="sharedWorkoutApply" class="week-nav-btn" type="button">Apply</button>
+      <button id="sharedWorkoutClose" class="week-nav-btn" type="button">Close</button>
       <span id="sharedWorkoutStatus" style="font-size:12px; color:var(--text-muted);"></span>
     </div>`;
 
+  document.getElementById("sharedWorkoutClose").addEventListener("click", () => { sharedWorkoutOpen = false; renderPlan(); });
   document.getElementById("sharedWorkoutApply").addEventListener("click", async () => {
     const status = document.getElementById("sharedWorkoutStatus");
     const weekday = +document.getElementById("sharedWorkoutDay").value;
@@ -1232,55 +1244,63 @@ async function saveSharedWorkout(weekStartStr, weekday, text, ownerIds) {
   notifyPush({ type: "plan", ownerIds });
 }
 
-// The last 8 weeks of distance: the whole group in "All", one runner when a name is picked. The viewed week is the
-// solid bar; tapping any bar jumps to that week (the same thing the Previous/Next week buttons do).
-const TREND_WEEKS = 8;
-function renderTrend() {
-  const nowStart = weekStart(TODAY).getTime();
-  const weeks = [...Array(TREND_WEEKS).keys()].map(i => {
-    const startMs = nowStart - (TREND_WEEKS - 1 - i) * 7 * DAY;
-    const list = ACTIVITIES.filter(a => matchesRunner(a) && a.startTimeInSeconds * 1000 >= startMs && a.startTimeInSeconds * 1000 < startMs + 7 * DAY);
-    return { startMs, km: list.reduce((t, a) => t + km(a), 0), runs: list.length, ago: TREND_WEEKS - 1 - i };
+// Steps for each day of the viewed week: one runner's own count when a name is picked, otherwise the average over
+// the runners who have a count that day (some runners' Garmin wellness data never reaches Intervals.icu).
+const fmtSteps = v => v >= 10000 ? Math.round(v / 1000) + "k" : v >= 1000 ? (v / 1000).toFixed(1).replace(/.0$/, "") + "k" : String(Math.round(v));
+function renderSteps() {
+  const { start } = weekBounds();
+  const days = [...Array(7).keys()].map(i => new Date(start.getTime() + i * DAY));
+  const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const todayStr = ymd(new Date());
+  const mine = STEPS.filter(r => selectedRunnerId === null || r.ownerId === selectedRunnerId);
+  const perDay = days.map(d => {
+    const rows = mine.filter(r => r.date === ymd(d));
+    return { d, n: rows.length, avg: rows.length ? rows.reduce((t, r) => t + r.steps, 0) / rows.length : 0, today: ymd(d) === todayStr };
   });
-  document.getElementById("trendSub").textContent =
-    "Last 8 weeks · tap a bar to view that week" + (selectedRunnerId !== null ? " · " + runnerById(selectedRunnerId).name : "");
-  const el = document.getElementById("trendChart");
-  if (!weeks.some(w => w.runs)) { el.innerHTML = `<div class="empty-note">No runs in the last 8 weeks</div>`; return; }
+  const dayKeys = new Set(days.map(ymd));
+  const tracked = new Set(mine.filter(r => dayKeys.has(r.date)).map(r => r.ownerId)).size;
+  document.getElementById("stepsSub").textContent =
+    `${fmtDateEn(days[0])} – ${fmtDateEn(days[6])}` + (weekOffset === 0 ? " (this week)" : "") +
+    (selectedRunnerId !== null ? " · " + runnerById(selectedRunnerId).name : tracked ? ` · average of ${tracked} runner${tracked > 1 ? "s" : ""}` : "");
+  const el = document.getElementById("stepsChart");
+  if (!perDay.some(p => p.n)) {
+    el.innerHTML = `<div class="empty-note">${STEPS.length ? "No step counts for this week" : "Step counts will show up here after the next sync"}</div>`;
+    return;
+  }
 
-  const W = 480, H = 250, m = { t: 22, r: 14, b: 30, l: 38 };
-  const niceMax = Math.ceil((Math.max(...weeks.map(w => w.km)) || 1) / 4 / 5) * 5 * 4 || 20;
-  const bw = (W - m.l - m.r) / TREND_WEEKS;
+  const W = 480, H = 250, m = { t: 22, r: 14, b: 36, l: 38 };
+  const niceMax = Math.ceil((Math.max(...perDay.map(p => p.avg)) || 1) / 4 / 2500) * 2500 * 4 || 10000;
+  const bw = (W - m.l - m.r) / 7;
   const y = v => H - m.b - v / niceMax * (H - m.t - m.b);
   const ink = getComputedStyle(document.documentElement);
   const muted = ink.getPropertyValue("--text-muted").trim(), secondary = ink.getPropertyValue("--text-secondary").trim();
-  const grid = ink.getPropertyValue("--grid").trim(), baseline = ink.getPropertyValue("--baseline").trim();
-  const accent = ink.getPropertyValue("--accent").trim();
-
+  const grid = ink.getPropertyValue("--grid").trim(), baseline = ink.getPropertyValue("--baseline").trim(), accent = ink.getPropertyValue("--accent").trim();
   let g = "";
   for (let i = 0; i <= 4; i++) {
     const v = niceMax * i / 4;
     g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="${v === 0 ? baseline : grid}" stroke-width="1"/>` +
-         `<text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end" font-size="10" fill="${muted}">${Math.round(v)}</text>`;
+         `<text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end" font-size="10" fill="${muted}">${fmtSteps(v)}</text>`;
   }
-  weeks.forEach((w, i) => {
-    const bx = m.l + i * bw, top = y(w.km), cx = bx + bw / 2, viewed = w.ago === -weekOffset;
-    g += `<rect data-ago="${w.ago}" x="${bx + 5}" y="${top}" width="${Math.max(bw - 10, 2)}" height="${Math.max((H - m.b) - top, 0)}" rx="4" fill="${accent}" opacity="${viewed ? 1 : 0.35}" style="cursor:pointer"/>`;
-    if (w.km > 0) g += `<text x="${cx}" y="${top - 6}" text-anchor="middle" font-size="10" font-weight="${viewed ? 700 : 400}" fill="${viewed ? ink.getPropertyValue("--text-primary").trim() : secondary}">${Math.round(w.km)}</text>`;
-    g += `<text x="${cx}" y="${H - 10}" text-anchor="middle" font-size="10" fill="${muted}" font-weight="${viewed ? 700 : 400}">${fmtDateEn(new Date(w.startMs))}</text>`;
+  perDay.forEach((p, i) => {
+    const bx = m.l + i * bw, top = y(p.avg), cx = bx + bw / 2;
+    g += `<rect data-day="${i}" x="${bx + 4}" y="${top}" width="${Math.max(bw - 8, 2)}" height="${Math.max((H - m.b) - top, 0)}" rx="4" fill="${accent}" opacity="${p.today ? 0.4 : 1}"/>`;
+    if (p.n) g += `<text x="${cx}" y="${top - 6}" text-anchor="middle" font-size="10" fill="${secondary}">${fmtSteps(p.avg)}</text>`;
+    g += `<text x="${cx}" y="${H - 22}" text-anchor="middle" font-size="11" fill="${muted}">${WEEKDAY_EN[i]}</text>` +
+         `<text x="${cx}" y="${H - 8}" text-anchor="middle" font-size="10" fill="${muted}">${fmtDateEn(p.d)}</text>`;
   });
   el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${g}</svg>`;
-  el.querySelectorAll("rect[data-ago]").forEach(rect => {
-    const w = weeks.find(x => x.ago === +rect.dataset.ago);
+  el.querySelectorAll("rect[data-day]").forEach(rect => {
+    const p = perDay[+rect.dataset.day];
     rect.addEventListener("mousemove", e => showTip(
-      `<div class="t-title">${fmtDateEn(new Date(w.startMs))} – ${fmtDateEn(new Date(w.startMs + 6 * DAY))}</div>
-       <div class="t-row">Distance<b>${fmtKm(w.km)} km</b></div><div class="t-row">Runs<b>${w.runs}</b></div>`, e.clientX, e.clientY));
+      `<div class="t-title">${WEEKDAY_EN[+rect.dataset.day]} · ${fmtDateEn(p.d)}${p.today ? " (so far)" : ""}</div>
+       <div class="t-row">${selectedRunnerId === null ? "Average steps" : "Steps"}<b>${Math.round(p.avg).toLocaleString("en-US")}</b></div>
+       ${selectedRunnerId === null ? `<div class="t-row">Runners counted<b>${p.n}</b></div>` : ""}`, e.clientX, e.clientY));
     rect.addEventListener("mouseleave", hideTip);
-    rect.addEventListener("click", () => { hideTip(); weekOffset = -w.ago; refreshWeekViews(); });
   });
 }
 
 // Everything that follows the viewed week.
-function refreshWeekViews() { renderWeekNav(); renderTiles(); renderBars(); renderTrend(); renderHighlights(); }
+function refreshWeekViews() { renderWeekNav(); renderTiles(); renderBars(); renderSteps(); renderHighlights(); }
 
 function renderFeed() {
   // For a single runner, "Recent activities" shows their full history in growing weekly
@@ -2304,7 +2324,7 @@ document.getElementById("jumpNav").addEventListener("click", e => {
   if (b) document.getElementById(b.dataset.jump)?.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
-function renderAll() { renderRunnerFilters(); renderProfileLink(); renderWeekNav(); renderHighlights(); renderRaces(); renderGroupSessions(); renderTiles(); renderBars(); renderPlan(); renderTrend(); renderFeed(); renderJumpNav(); }
+function renderAll() { renderRunnerFilters(); renderProfileLink(); renderWeekNav(); renderHighlights(); renderRaces(); renderGroupSessions(); renderTiles(); renderBars(); renderPlan(); renderSteps(); renderFeed(); renderJumpNav(); }
 
 document.getElementById("runnerFilters").addEventListener("click", e => {
   const btn = e.target.closest("button[data-runner]");
@@ -2687,7 +2707,7 @@ async function loadFromSupabase(accessToken) {
   const cutoffSec = Math.floor(Date.now() / 1000) - 90 * 86400;
   const cutoffDate = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
 
-  const [runnersRaw, activitiesRaw, sleepRaw, planRaw, highlightsRaw, racesRaw, rolesRaw, recordsRaw, profilesRaw, myRunnerId, sigsRaw, authorsRaw] = await Promise.all([
+  const [runnersRaw, activitiesRaw, sleepRaw, planRaw, highlightsRaw, racesRaw, rolesRaw, recordsRaw, profilesRaw, myRunnerId, sigsRaw, authorsRaw, stepsRaw] = await Promise.all([
     supaGet(`runners?select=id,name,device&order=id`, accessToken),
     supaGet(`activities?select=*&startTimeInSeconds=gte.${cutoffSec}&order=startTimeInSeconds.desc`, accessToken),
     supaGet(`sleep?select=*&date=gte.${cutoffDate}`, accessToken),
@@ -2702,6 +2722,7 @@ async function loadFromSupabase(accessToken) {
     supaRpc("my_runner_id", accessToken).catch(() => null),
     supaGet(`activity_details?select=activityId,sig:streams->sig&fetchedAt=gte.${cutoffDate}&order=fetchedAt.desc&limit=1000`, accessToken).catch(() => []),
     supaRpc("author_runners", accessToken).catch(() => []), // author_names.sql not run yet -> short names stay, nothing breaks
+    supaGet(`daily_steps?select=ownerId,date,steps&date=gte.${cutoffDate}&limit=1000`, accessToken).catch(() => []), // daily_steps.sql not run yet -> empty graph, nothing breaks
   ]);
 
   RUNNERS = runnersRaw.map((r, i) => ({ ...r, slot: (i % 12) + 1 }));
@@ -2717,6 +2738,7 @@ async function loadFromSupabase(accessToken) {
   if (coachesFromDb.length) COACH_EMAILS = coachesFromDb;
   ACTIVITIES = activitiesRaw;
   SLEEP = sleepRaw;
+  STEPS = Array.isArray(stepsRaw) ? stepsRaw : [];
   HIGHLIGHTS = highlightsRaw;
   RACES = racesRaw;
   PLAN_HISTORY = {};

@@ -84,7 +84,7 @@ async function updateRecords() {
     (stale.length ? `, removed ${stale.length} stale` : ""));
 }
 
-module.exports = { updateRecords, computeRecords };
+module.exports = { updateRecords, computeRecords, rest };
 
 if (require.main === module) {
   updateRecords().catch(e => { console.error("Records update failed:", e.message); process.exit(1); });
