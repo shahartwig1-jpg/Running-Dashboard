@@ -211,6 +211,10 @@
   .feed-name { font-weight: 600; font-size: 13px; }
   .feed-time { font-size: 11px; color: var(--text-muted); }
   .feed-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .sport-tag {
+    display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; vertical-align: 1px;
+    color: var(--text-secondary); border: 1px solid var(--border); border-radius: 999px; padding: 0 7px; margin-inline-end: 7px;
+  }
   .feed-body { display: flex; align-items: center; gap: 14px; margin: 6px 0 10px; }
   .feed-metrics { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
   .fm-main { display: flex; align-items: baseline; gap: 6px; }
@@ -669,7 +673,8 @@ const weekStart = d => { const x = new Date(d); x.setHours(0,0,0,0); x.setDate(x
 let RUNNERS = DEMO_RUNNERS;
 let TODAY = new Date(2026, 6, 15, 12, 0, 0); // demo reference date
 let WEEKS = [];
-let ACTIVITIES = [];
+let ACTIVITIES = [];     // runs only: every running number on the page (weekly km, graphs, records, group sessions) uses this
+let ALL_ACTIVITIES = []; // runs plus rides, swims and strength sessions: the feed and the detail panel use this
 let SLEEP = [];
 let STEPS = []; // daily_steps rows: { ownerId, date, steps } (empty until supabase/daily_steps.sql is run and a sync has filled it)
 let PLAN_HISTORY = {}; // ownerId -> { weekStartISO -> array of 7 day strings (Sun -> Sat) }
@@ -732,7 +737,7 @@ function buildDemoSleep() {
 }
 
 computeWeeks();
-ACTIVITIES = buildDemoActivities();
+ACTIVITIES = ALL_ACTIVITIES = buildDemoActivities();
 SLEEP = buildDemoSleep();
 
 /* ---------- helpers ---------- */
@@ -783,6 +788,28 @@ let highlightFormOpen = false; // the "share a highlight" form stays folded away
 // scrolling a runner's history doesn't drag the weekly charts/highlights along with it.
 let feedWeeksLoaded = 1;
 let feedAllShown = 14; // runs listed in the "All" view, grown by the "Show more runs" button
+
+// Which sport an activity is, from Intervals.icu's type ("Run", "TrailRun", "VirtualRide", "Swim", "WeightTraining"...).
+function sportOf(a) {
+  const t = a.activityType || "Run";
+  return /run/i.test(t) ? "run" : /ride|cycl|bike/i.test(t) ? "ride" : /swim/i.test(t) ? "swim" : /weight|strength/i.test(t) ? "strength" : "other";
+}
+const SPORT_LABEL = { run: "Run", ride: "Ride", swim: "Swim", strength: "Strength", other: "Workout" };
+function setActivities(list) {
+  ALL_ACTIVITIES = list.filter(a => !a.hidden); // runs the sync could not confirm still exist (hidden column) count nowhere
+  ACTIVITIES = ALL_ACTIVITIES.filter(a => sportOf(a) === "run");
+}
+// The numbers that make sense for each sport: pace per km for runs, speed for rides, pace per 100 m for swims.
+function sportMetrics(a) {
+  const sport = sportOf(a), d = a.distanceInMeters || 0, t = a.durationInSeconds || 0;
+  const hr = { label: "HEART RATE", value: a.averageHeartRateInBeatsPerMinute ?? "-", unit: "bpm" };
+  const time = { label: "TIME", value: fmtDur(t) };
+  if (sport === "ride") return { main: d ? [fmtKm(d / 1000), "km"] : [fmtDur(t), ""], grid: [time, { label: "SPEED", value: d && t ? (d / 1000 / (t / 3600)).toFixed(1) : "-", unit: "km/h" }, hr] };
+  if (sport === "swim") return { main: [Math.round(d).toLocaleString("en-US"), "m"], grid: [time, { label: "PACE", value: d && t ? fmtPace(t / (d / 100)) : "-", unit: "/100m" }, hr] };
+  if (sport === "strength" || sport === "other" || !d) return { main: [fmtDur(t), ""], grid: [hr] };
+  return { main: [fmtKm(d / 1000), "km"], grid: [time, { label: "PACE", value: fmtPace(t / (d / 1000)), unit: "/km" }, hr] };
+}
+const sportTagHtml = a => sportOf(a) === "run" || (a.activityName || "").trim().toLowerCase() === SPORT_LABEL[sportOf(a)].toLowerCase() ? "" : `<span class="sport-tag">${SPORT_LABEL[sportOf(a)]}</span>`; // no tag when the name already says it
 
 function matchesRunner(a) {
   return selectedRunnerId === null || a.ownerId === selectedRunnerId;
@@ -1324,7 +1351,7 @@ function renderFeed() {
     const end = weekStart(TODAY).getTime() + 7 * DAY; // end of this week
     const oldestLoadable = TODAY.getTime() - 90 * DAY; // matches the server-side fetch cutoff
     const start = Math.max(weekStart(TODAY).getTime() - (feedWeeksLoaded - 1) * 7 * DAY, oldestLoadable);
-    all = ACTIVITIES.filter(a => matchesRunner(a) && a.startTimeInSeconds * 1000 >= start && a.startTimeInSeconds * 1000 < end)
+    all = ALL_ACTIVITIES.filter(a => !a.hidden && matchesRunner(a) && a.startTimeInSeconds * 1000 >= start && a.startTimeInSeconds * 1000 < end)
       .sort((a, b) => b.startTimeInSeconds - a.startTimeInSeconds);
     acts = all;
     document.getElementById("tableSub").textContent =
@@ -1332,10 +1359,10 @@ function renderFeed() {
     loadMoreBtn.textContent = "Load previous week";
     loadMoreBtn.style.display = start > oldestLoadable ? "" : "none";
   } else {
-    all = ACTIVITIES.filter(matchesRunner);
+    all = ALL_ACTIVITIES.filter(a => !a.hidden && matchesRunner(a));
     acts = all.slice(0, feedAllShown);
-    document.getElementById("tableSub").textContent = "Latest runs from the group";
-    loadMoreBtn.textContent = "Show more runs";
+    document.getElementById("tableSub").textContent = "Latest workouts from the group";
+    loadMoreBtn.textContent = "Show more";
     loadMoreBtn.style.display = all.length > feedAllShown ? "" : "none";
   }
 
@@ -1346,7 +1373,7 @@ function renderFeed() {
   }
   el.innerHTML = acts.map(a => {
     const r = runnerById(a.ownerId);
-    const pace = a.durationInSeconds / km(a);
+    const m = sportMetrics(a);
     return `<div class="feed-item" data-activity-id="${esc(a.activityId)}">
       ${runnerAvatarHtml(r, false, true)}
       <div class="feed-main">
@@ -1354,15 +1381,13 @@ function renderFeed() {
           <span class="feed-name" data-profile="${esc(r.id)}">${esc(r.name)}</span>
           <span class="feed-time">${fmtDate(a.startTimeInSeconds)}</span>
         </div>
-        <div class="feed-title">${esc(a.activityName) || "Run"}${recordBadgeHtml(a.activityId)}</div>
+        <div class="feed-title">${sportTagHtml(a)}${esc(a.activityName) || SPORT_LABEL[sportOf(a)]}${recordBadgeHtml(a.activityId)}</div>
         <div class="feed-body">
           <div class="route-map feed-map" data-feed-map="${esc(a.activityId)}" hidden></div>
           <div class="feed-metrics">
-            <div class="fm-main"><b>${fmtKm(km(a))}</b><span>km</span></div>
+            <div class="fm-main"><b>${m.main[0]}</b>${m.main[1] ? `<span>${m.main[1]}</span>` : ""}</div>
             <div class="fm-grid">
-              <div class="fm"><small>TIME</small><b>${fmtDur(a.durationInSeconds)}</b></div>
-              <div class="fm"><small>PACE</small><b>${fmtPace(pace)}<i>/km</i></b></div>
-              <div class="fm"><small>HEART RATE</small><b>${a.averageHeartRateInBeatsPerMinute ?? "-"}<i>bpm</i></b></div>
+              ${m.grid.map(g => `<div class="fm"><small>${g.label}</small><b>${g.value}${g.unit ? `<i>${g.unit}</i>` : ""}</b></div>`).join("")}
             </div>
             <div class="fm-foot">${groupTagHtml(a)}${a.deviceName ? `<span class="device">${esc(a.deviceName)}</span>` : ""}</div>
           </div>
@@ -1811,7 +1836,10 @@ function openProfile(ownerId) {
     return `<div class="rec-history-row" data-open-activity="${esc(m.activityId)}"><span>${when}</span><span class="gs-session-meta">${esc(result)}</span></div>`;
   }).join("")}</div>` : "";
 
-  const recent = mine.slice(0, 5).map(a => `<div class="rec-history-row" data-open-activity="${esc(a.activityId)}"><span>${recDate(a.startTimeInSeconds)}</span><b>${fmtKm(km(a))} km</b><span class="gs-session-meta">${fmtDur(a.durationInSeconds)} · ${fmtPace(paceOf(a))} /km</span></div>`).join("");
+  const recent = ALL_ACTIVITIES.filter(a => a.ownerId === ownerId && !a.hidden).sort((x, y) => y.startTimeInSeconds - x.startTimeInSeconds).slice(0, 5).map(a => {
+    const m = sportMetrics(a), second = m.grid.find(g => g.label !== "TIME" && g.label !== "HEART RATE");
+    return `<div class="rec-history-row" data-open-activity="${esc(a.activityId)}"><span>${recDate(a.startTimeInSeconds)}</span><b>${m.main[0]}${m.main[1] ? " " + m.main[1] : ""}</b><span class="gs-session-meta">${[sportOf(a) === "run" ? "" : SPORT_LABEL[sportOf(a)], m.main[1] ? fmtDur(a.durationInSeconds) : "", second ? `${second.value} ${second.unit}` : ""].filter(Boolean).join(" · ")}</span></div>`;
+  }).join("");
 
   const bodyHtml = bodyFitnessHtml(ownerId);
 
@@ -1838,7 +1866,7 @@ function openProfile(ownerId) {
     <div class="section-title">Personal bests</div>
     <div class="rec-history">${pbHtml}</div>
     ${sleepHtml}${sessionsHtml}
-    <div class="section-title">Recent runs</div>
+    <div class="section-title">Recent workouts</div>
     <div class="rec-history">${recent || '<div class="empty-note" style="padding:8px 0">No runs yet</div>'}</div>`;
   document.getElementById("overlay").style.display = "block";
   document.getElementById("closeSheet").addEventListener("click", closeDetail);
@@ -2184,7 +2212,7 @@ async function renderSticker(a) {
 }
 
 function stickerSectionHtml(a) {
-  if (!a || !(km(a) > 0)) return "";
+  if (!a || !(km(a) > 0) || sportOf(a) !== "run") return "";
   return `<div class="section-title">Share sticker</div>
     <div class="sticker-preview"><img id="stickerImg" alt="Stats sticker" hidden></div>
     <div class="sticker-actions">
@@ -2213,8 +2241,9 @@ function initSticker(a) {
 }
 
 async function openDetail(activityId) {
-  const a = ACTIVITIES.find(x => String(x.activityId) === String(activityId));
+  const a = ALL_ACTIVITIES.find(x => String(x.activityId) === String(activityId));
   const r = a ? runnerById(a.ownerId) : null;
+  const sport = a ? sportOf(a) : "run";
   const sheet = document.getElementById("sheet");
   sheet.innerHTML = `
     <div class="sheet-head">
@@ -2231,7 +2260,7 @@ async function openDetail(activityId) {
   const detail = await loadDetail(activityId);
   const body = document.getElementById("sheetBody");
   if (!detail) {
-    body.innerHTML = `<div class="empty-note">No details (laps/charts) for this run yet.<br>
+    body.innerHTML = `<div class="empty-note">No details (laps/charts) for this workout yet.<br>
       Details are only kept for the last 20 runs — rerun <code>node fetch-data.js</code> if this is a new run.</div>
       ${recordBannerHtml(activityId)}${groupResultsHtml(activityId)}${stickerSectionHtml(a)}
       <div id="engagement"></div>`;
@@ -2240,28 +2269,31 @@ async function openDetail(activityId) {
     return;
   }
 
-  const tilesHtml = a ? `
-    <div class="mini-tiles">
-      <div class="mini-tile"><div class="label">Distance</div><div class="value">${fmtKm(km(a))} km</div></div>
-      <div class="mini-tile"><div class="label">Time</div><div class="value">${fmtDur(a.durationInSeconds)}</div></div>
-      <div class="mini-tile"><div class="label">Avg pace</div><div class="value">${fmtPace(a.durationInSeconds / km(a))}</div></div>
-      <div class="mini-tile"><div class="label">Avg HR</div><div class="value">${a.averageHeartRateInBeatsPerMinute ?? "-"}</div></div>
-    </div>` : "";
+  const tilesHtml = a ? (() => {
+    const m = sportMetrics(a);
+    const tiles = [...(m.main[1] ? [{ label: "Distance", value: m.main[0], unit: m.main[1] }] : []), ...m.grid];
+    if (!tiles.some(t => t.label === "TIME")) tiles.unshift({ label: "Time", value: fmtDur(a.durationInSeconds) });
+    const cap = l => l.charAt(0) + l.slice(1).toLowerCase();
+    return `<div class="mini-tiles">${tiles.map(t => `<div class="mini-tile"><div class="label">${cap(t.label)}</div><div class="value">${t.value}${t.unit ? " " + t.unit : ""}</div></div>`).join("")}</div>`;
+  })() : "";
 
   let lapsHtml = `<div class="empty-note">No lap data</div>`;
   if (detail.laps && detail.laps.length) {
-    lapsHtml = `<table><thead><tr><th>#</th><th>Distance</th><th>Pace</th><th>HR</th><th>Cadence</th></tr></thead><tbody>` +
+    // Pace column per sport: min/km for runs, km/h for rides, min/100 m for swims.
+    const lapPace = l => !l.paceSecPerKm ? "-" : sport === "ride" ? (3600 / l.paceSecPerKm).toFixed(1) : sport === "swim" ? fmtPace(l.paceSecPerKm / 10) : fmtPace(l.paceSecPerKm);
+    const paceHead = sport === "ride" ? "km/h" : sport === "swim" ? "/100m" : "Pace";
+    lapsHtml = `<table><thead><tr><th>#</th><th>Distance</th><th>${paceHead}</th><th>HR</th><th>Cadence</th></tr></thead><tbody>` +
       detail.laps.map((l, i) => `<tr>
         <td>${i + 1}</td>
         <td>${l.distanceInMeters != null ? fmtKm(l.distanceInMeters / 1000) : "-"} km</td>
-        <td>${l.paceSecPerKm ? fmtPace(l.paceSecPerKm) : "-"}</td>
+        <td>${lapPace(l)}</td>
         <td>${l.averageHeartRateInBeatsPerMinute ?? "-"}</td>
         <td>${l.averageCadence ?? "-"}</td>
       </tr>`).join("") + `</tbody></table>`;
   }
 
   let chartsHtml = "";
-  if (detail.streams && detail.streams.timeInSeconds?.length) {
+  if (sport === "run" && detail.streams && detail.streams.timeInSeconds?.length) {
     const distKm = detail.streams.distanceInMeters.map(d => d / 1000);
     const { x: xHr, y: yHr } = downsample(distKm, detail.streams.heartrate);
     const { x: xPc, y: yPc } = downsample(distKm, detail.streams.paceSecPerKm);
@@ -2447,7 +2479,7 @@ async function loadReal() {
   if (!d || !Array.isArray(d.activities) || !d.activities.length) return false;
 
   RUNNERS = d.runners.map((r, i) => ({ ...r, slot: (i % 12) + 1 }));
-  ACTIVITIES = d.activities.slice().sort((a, b) => b.startTimeInSeconds - a.startTimeInSeconds);
+  setActivities(d.activities.slice().sort((a, b) => b.startTimeInSeconds - a.startTimeInSeconds));
   SLEEP = Array.isArray(d.sleep) ? d.sleep : [];
   PLAN_HISTORY = d.planHistory && typeof d.planHistory === "object" ? d.planHistory : {};
   TODAY = new Date();
@@ -2820,7 +2852,7 @@ async function loadFromSupabase(accessToken) {
   // an empty/missing table must never turn into "nobody is a coach".
   const coachesFromDb = rolesRaw.filter(r => r.role === "coach").map(r => r.email.toLowerCase());
   if (coachesFromDb.length) COACH_EMAILS = coachesFromDb;
-  ACTIVITIES = activitiesRaw;
+  setActivities(activitiesRaw);
   SLEEP = sleepRaw;
   STEPS = Array.isArray(stepsRaw) ? stepsRaw : [];
   HIGHLIGHTS = highlightsRaw;

@@ -44,6 +44,7 @@ function computeRecords(activities) {
   const out = [];
   const byOwner = new Map();
   for (const a of activities) {
+    if (a.activityType && !/run/i.test(a.activityType)) continue; // a 10 km ride or swim is not a 10K record
     if (!byOwner.has(a.ownerId)) byOwner.set(a.ownerId, []);
     byOwner.get(a.ownerId).push(a);
   }
@@ -68,7 +69,7 @@ function computeRecords(activities) {
 }
 
 async function updateRecords() {
-  const activities = await fetchAll("activities", "select=ownerId,activityId,startTimeInSeconds,distanceInMeters,durationInSeconds&order=startTimeInSeconds.asc");
+  const activities = await fetchAll("activities", "select=ownerId,activityId,activityType,startTimeInSeconds,distanceInMeters,durationInSeconds&order=startTimeInSeconds.asc");
   const computed = computeRecords(activities);
   if (computed.length) {
     await rest("POST", "records?on_conflict=ownerId,distance,activityId", { body: computed, prefer: "resolution=merge-duplicates,return=minimal" });

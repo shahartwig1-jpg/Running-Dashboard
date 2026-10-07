@@ -106,6 +106,11 @@ function normalize(a, athleteId) {
 }
 
 const isRun = a => /run/i.test(a.activityType || "");
+// Besides runs, the feed shows rides (outdoor and indoor), swims and strength sessions. Everything that adds up
+// running numbers (weekly km, records, group sessions, the "finished a run" push) still looks at runs only.
+const isOtherSport = a => /ride|cycl|bike|swim|weight|strength/i.test(a.activityType || "");
+// Runs and swims need a distance; a ride on a trainer usually has one too; strength never does.
+const keepActivity = a => a.durationInSeconds > 0 && (isRun(a) ? a.distanceInMeters > 0 : isOtherSport(a));
 
 /* Intervals.icu's wellness record carries a lot more than sleep (mood, stress,
    bodyFat, bloodGlucose, menstrualPhase, ...). Teammates agreed to share running
@@ -276,12 +281,12 @@ async function fetchAll(cfg) {
     keyByAthlete[ath.id] = key;
     try {
       const raw = await call(key, `/athlete/${ath.id}/activities?oldest=${oldest}&newest=${newest}`);
-      const mine = raw.map(a => normalize(a, ath.id)).filter(isRun)
-        .filter(a => a.distanceInMeters && a.durationInSeconds);
+      const mine = raw.map(a => normalize(a, ath.id)).filter(keepActivity);
       activities.push(...mine);
-      const device = mine.find(a => a.deviceName)?.deviceName || "";
+      const device = (mine.find(a => isRun(a) && a.deviceName) || mine.find(a => a.deviceName))?.deviceName || ""; // the running watch, not a bike computer
       runners.push({ id: ath.id, name: ath.name || ath.id, device, slot: (i % 8) + 1 });
-      console.log(`${ath.name || ath.id}: ${mine.length} runs`);
+      const runCount = mine.filter(isRun).length;
+      console.log(`${ath.name || ath.id}: ${runCount} runs${mine.length > runCount ? `, ${mine.length - runCount} other workout(s)` : ""}`);
 
       try {
         // "Missing from the list endpoint" is NOT reliable proof of deletion — confirmed
@@ -296,7 +301,7 @@ async function fetchAll(cfg) {
         // run" push notification sent once the whole sync is done. An already-known run being
         // re-synced (e.g. its stats changed) doesn't count, even though it's still in `mine`.
         const existingSet = new Set(existingIds.map(String));
-        for (const a of mine) {
+        for (const a of mine.filter(isRun)) { // the push is about runs only
           if (!existingSet.has(String(a.activityId))) {
             newRuns.push({
               activityId: a.activityId, ownerId: a.ownerId, ownerName: ath.name || ath.id,
@@ -406,4 +411,4 @@ if (require.main === module) {
   })();
 }
 
-module.exports = { normalize, normalizeLap, normalizeStreams };
+module.exports = { normalize, normalizeLap, normalizeStreams, keepActivity };
