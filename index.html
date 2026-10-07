@@ -392,6 +392,8 @@
   .profile-edit { margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .route-map { height: 260px; border-radius: 10px; overflow: hidden; isolation: isolate; background: var(--grid); }
   .route-map .leaflet-control-attribution { font-size: 10px; }
+  .feed-map { height: 190px; margin: 2px 0 10px; }
+  .feed-map, .feed-map * { pointer-events: none !important; }
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .route-map .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9); } }
   :root[data-theme="dark"] .route-map .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9); }
   .idle-note { font-size: 12px; color: var(--text-muted); margin-top: 10px; }
@@ -1376,6 +1378,7 @@ function renderFeed() {
           <span><b>${a.averageHeartRateInBeatsPerMinute ?? "-"}</b> bpm</span>
           <span class="device">${esc(a.deviceName)}</span>
         </div>
+        <div class="route-map feed-map" data-feed-map="${esc(a.activityId)}" hidden></div>
         <div class="photo-wrap" data-photo-wrap-for="${esc(a.activityId)}" style="display:none">
           <button class="photo-toggle-btn" type="button">Minimize</button>
           <img class="feed-photo" data-photo-for="${esc(a.activityId)}">
@@ -1391,6 +1394,35 @@ function renderFeed() {
     item.addEventListener("click", () => openDetail(item.dataset.activityId));
   });
   loadFeedEngagement(acts.map(a => a.activityId));
+  loadFeedMaps(acts.map(a => a.activityId));
+}
+
+// Small route maps on the run cards. The routes of the visible runs come in one request; each map is only built
+// when its card is about to scroll into view, so a long list doesn't load a pile of map tiles up front.
+const feedRouteCache = new Map(); // activityId -> route, or null when the run has none
+const feedMapObserver = new IntersectionObserver(entries => entries.forEach(e => {
+  if (!e.isIntersecting) return;
+  feedMapObserver.unobserve(e.target);
+  drawRouteMap(e.target, e.target._route, { mini: true });
+}), { rootMargin: "300px" });
+async function loadFeedMaps(ids) {
+  const need = ids.filter(id => !feedRouteCache.has(id));
+  const token = getSession()?.access_token;
+  try {
+    if (need.length && token) {
+      const rows = await supaGet(`activity_details?select=activityId,route:streams->route&activityId=in.(${need.map(encodeURIComponent).join(",")})`, token);
+      need.forEach(id => feedRouteCache.set(id, null));
+      rows.forEach(r => feedRouteCache.set(r.activityId, Array.isArray(r.route) && r.route.length > 1 ? r.route : null));
+    } else {
+      for (const id of need) feedRouteCache.set(id, routeOf(await loadDetail(id))); // local preview: per-run detail files
+    }
+  } catch { return; } // no routes yet (or a hiccup): the cards simply have no map
+  ids.forEach(id => {
+    const el = document.querySelector(`[data-feed-map="${CSS.escape(id)}"]`), route = feedRouteCache.get(id);
+    if (!el || !route || el.dataset.drawn) return;
+    el._route = route; el.hidden = false;
+    feedMapObserver.observe(el);
+  });
 }
 
 async function loadFeedEngagement(activityIds) {
@@ -1851,17 +1883,20 @@ function loadLeaflet() {
   });
   return leafletPromise;
 }
-async function drawRouteMap(el, route) {
+async function drawRouteMap(el, route, opts = {}) {
   if (!el || el.dataset.drawn) return;
   el.dataset.drawn = "1";
   try {
     const L = await loadLeaflet();
-    const map = L.map(el, { scrollWheelZoom: false });
+    const map = L.map(el, opts.mini
+      ? { zoomControl: false, dragging: false, touchZoom: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false }
+      : { scrollWheelZoom: false });
     el._routeMap = map;
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap contributors" }).addTo(map);
     const line = L.polyline(route, { color: "#2a78d6", weight: 4, opacity: 0.95 }).addTo(map);
-    L.circleMarker(route[0], { radius: 6, color: "#fff", weight: 2, fillColor: "#1baf7a", fillOpacity: 1 }).addTo(map);
-    L.circleMarker(route[route.length - 1], { radius: 6, color: "#fff", weight: 2, fillColor: "#e34948", fillOpacity: 1 }).addTo(map);
+    const dot = opts.mini ? 4 : 6;
+    L.circleMarker(route[0], { radius: dot, color: "#fff", weight: 2, fillColor: "#1baf7a", fillOpacity: 1 }).addTo(map);
+    L.circleMarker(route[route.length - 1], { radius: dot, color: "#fff", weight: 2, fillColor: "#e34948", fillOpacity: 1 }).addTo(map);
     const fit = () => { map.invalidateSize(); map.fitBounds(line.getBounds(), { padding: [24, 24] }); };
     fit();
     // Re-fit whenever the map's box changes size (the side panel finishing its layout, a phone being rotated).
