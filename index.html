@@ -825,7 +825,7 @@ function renderHighlights() {
 
   const photoGallery = h => (h.weekly_highlight_photos || []).length
     ? `<div class="photo-gallery">${h.weekly_highlight_photos.map(p => `
-        <div class="photo-wrap"><button class="photo-toggle-btn" type="button">Minimize</button><img src="${esc(safeUrl(p.url))}" alt="Photo by ${esc(p.authorName)}"></div>`).join("")}</div>` : "";
+        <div class="photo-wrap"><button class="photo-toggle-btn" type="button">Minimize</button><img src="${esc(safeUrl(p.url))}" alt="Photo by ${esc(authorLabel(p.authorName))}"></div>`).join("")}</div>` : "";
   const fmtWhen = iso => new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
   const pendingEl = document.getElementById("highlightPending");
@@ -833,7 +833,7 @@ function renderHighlights() {
     <div class="highlight-pending-item" data-id="${h.id}">
       <div class="highlight-pending-label">Pending your approval</div>
       <div class="highlight-post-head">
-        <span class="highlight-author">${esc(h.authorName)}</span>
+        <span class="highlight-author">${esc(authorLabel(h.authorName))}</span>
         <span class="highlight-time">${fmtWhen(h.createdAt)}</span>
       </div>
       <div class="highlight-text">${esc(h.description)}</div>
@@ -861,7 +861,7 @@ function renderHighlights() {
   document.getElementById("highlightApproved").innerHTML = approved.length ? approved.map(h => `
     <div class="highlight-post">
       <div class="highlight-post-head">
-        <span class="highlight-author">${esc(h.authorName)}</span>
+        <span class="highlight-author">${esc(authorLabel(h.authorName))}</span>
         <span class="highlight-time">${fmtWhen(h.createdAt)}</span>
       </div>
       <div class="highlight-text">${esc(h.description)}</div>
@@ -951,7 +951,7 @@ function renderRaces() {
           <input type="checkbox" class="race-rsvp-input" ${imIn ? "checked" : ""}> I'm in
         </label>` : ""}
       ${attendees.length
-        ? `<div class="kudos-avatars">${attendees.map(a => avatarHtml(a.authorName)).join("")}<span style="margin-inline-start:10px; font-size:12px; color:var(--text-muted)">${attendees.map(a => esc(a.authorName)).join(", ")}</span></div>`
+        ? `<div class="kudos-avatars">${attendees.map(a => authorAvatarHtml(a.authorName)).join("")}<span style="margin-inline-start:10px; font-size:12px; color:var(--text-muted)">${attendees.map(a => esc(authorLabel(a.authorName))).join(", ")}</span></div>`
         : `<div style="font-size:12px; color:var(--text-muted); margin-top:6px;">No one's confirmed yet</div>`}
     </div>`;
   }).join("") : `<div class="empty-note">No upcoming races${isCoach() ? " — click + Add race to add one" : ""}</div>`;
@@ -1681,7 +1681,7 @@ async function loadSessionPhotos(s) {
   const paint = photos => {
     const el = document.querySelector(`[data-photos-for="${CSS.escape(s.id)}"]`);
     if (!el) return;
-    el.innerHTML = photos.map(p => `<button type="button" data-open-activity="${esc(p.activityId)}" title="Photo by ${esc(p.authorName)}"><img src="${esc(safeUrl(p.url))}" alt="Photo by ${esc(p.authorName)}" loading="lazy"></button>`).join("");
+    el.innerHTML = photos.map(p => `<button type="button" data-open-activity="${esc(p.activityId)}" title="Photo by ${esc(authorLabel(p.authorName))}"><img src="${esc(safeUrl(p.url))}" alt="Photo by ${esc(authorLabel(p.authorName))}" loading="lazy"></button>`).join("");
   };
   if (groupPhotoCache.has(s.id)) { paint(groupPhotoCache.get(s.id)); return; }
   const session = getSession();
@@ -2235,7 +2235,7 @@ async function loadEngagement(activityId) {
   setHtml(`
     <div class="section-title">Photos</div>
     ${photos.length ? `<div class="photo-gallery">${photos.map(p => `
-      <div class="photo-wrap"><button class="photo-toggle-btn" type="button">Minimize</button><img src="${esc(safeUrl(p.url))}" alt="Photo by ${esc(p.authorName)}"></div>`).join("")}</div>` : ""}
+      <div class="photo-wrap"><button class="photo-toggle-btn" type="button">Minimize</button><img src="${esc(safeUrl(p.url))}" alt="Photo by ${esc(authorLabel(p.authorName))}"></div>`).join("")}</div>` : ""}
     <label class="add-photo-btn">📷 Add photo<input type="file" id="photoInput" accept="image/*" style="display:none"></label>
     <div id="photoStatus" style="font-size:11px; color:var(--text-muted); margin-top:4px;"></div>
 
@@ -2243,22 +2243,22 @@ async function loadEngagement(activityId) {
     <button id="likeBtn" class="kudos-btn${iLiked ? " given" : ""}">👍 Kudos${likes.length ? ` (${likes.length})` : ""}</button>
     ${likerNames.length ? `
       <div class="kudos-avatars">
-        ${likerNames.slice(0, 8).map(n => avatarHtml(n === "You" ? me : n)).join("")}
-        <span style="margin-inline-start:10px; font-size:12px; color:var(--text-muted)">${likerNames.map(esc).join(", ")}</span>
+        ${likerNames.slice(0, 8).map(n => authorAvatarHtml(n === "You" ? me : n)).join("")}
+        <span style="margin-inline-start:10px; font-size:12px; color:var(--text-muted)">${likerNames.map(n => esc(n === "You" ? n : authorLabel(n))).join(", ")}</span>
       </div>` : ""}
     <div id="commentsList" style="margin-top:14px;">${comments.length ? comments.map(c => `
       <div class="comment-item">
-        ${avatarHtml(c.authorName)}
+        ${authorAvatarHtml(c.authorName)}
         <div class="comment-body">
           <div class="comment-header">
-            <span class="comment-author">${esc(c.authorName)}</span>
+            <span class="comment-author">${esc(authorLabel(c.authorName))}</span>
             <span class="comment-time">${new Date(c.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
           </div>
           <div class="comment-text">${esc(c.text)}</div>
         </div>
       </div>`).join("") : `<div class="empty-note">No comments yet — be the first</div>`}</div>
     <div class="comment-input-row">
-      ${avatarHtml(me)}
+      ${authorAvatarHtml(me)}
       <input type="text" id="commentInput" placeholder="Write a comment…">
       <button id="commentBtn" class="comment-send-btn" title="Post">➤</button>
     </div>`);
@@ -2596,6 +2596,13 @@ function colorFromName(name) {
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
   return `hsl(${Math.abs(hash) % 360}, 55%, 45%)`;
 }
+// Likes, comments, RSVPs... are stored under the login's short name ("omer.goren10"). author_runners() (supabase/author_names.sql)
+// says which runner each short name belongs to, so the page can show "Omer" and his photo instead. Unlinked names stay as they are.
+let AUTHOR_RUNNER = {}; // short name -> runner id
+const authorRunner = name => { const id = AUTHOR_RUNNER[String(name || "").toLowerCase()]; return id ? runnerById(id) : null; };
+const authorLabel = name => authorRunner(name)?.name || name;
+const authorAvatarHtml = name => { const r = authorRunner(name); return r ? runnerAvatarHtml(r, false, true) : avatarHtml(name); };
+
 function avatarHtml(name) {
   return `<div class="avatar" style="background:${colorFromName(name)}">${esc((name[0] || "?").toUpperCase())}</div>`;
 }
@@ -2696,7 +2703,7 @@ async function loadFromSupabase(accessToken) {
   const cutoffSec = Math.floor(Date.now() / 1000) - 90 * 86400;
   const cutoffDate = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
 
-  const [runnersRaw, activitiesRaw, sleepRaw, planRaw, highlightsRaw, racesRaw, rolesRaw, recordsRaw, profilesRaw, myRunnerId, sigsRaw] = await Promise.all([
+  const [runnersRaw, activitiesRaw, sleepRaw, planRaw, highlightsRaw, racesRaw, rolesRaw, recordsRaw, profilesRaw, myRunnerId, sigsRaw, authorsRaw] = await Promise.all([
     supaGet(`runners?select=id,name,device&order=id`, accessToken),
     supaGet(`activities?select=*&startTimeInSeconds=gte.${cutoffSec}&order=startTimeInSeconds.desc`, accessToken),
     supaGet(`sleep?select=*&date=gte.${cutoffDate}`, accessToken),
@@ -2710,10 +2717,12 @@ async function loadFromSupabase(accessToken) {
     supaGet(`profiles?select=ownerId,photoUrl`, accessToken).catch(() => []), // profiles.sql not run yet -> initials, nothing breaks
     supaRpc("my_runner_id", accessToken).catch(() => null),
     supaGet(`activity_details?select=activityId,sig:streams->sig&fetchedAt=gte.${cutoffDate}&order=fetchedAt.desc&limit=1000`, accessToken).catch(() => []),
+    supaRpc("author_runners", accessToken).catch(() => []), // author_names.sql not run yet -> short names stay, nothing breaks
   ]);
 
   RUNNERS = runnersRaw.map((r, i) => ({ ...r, slot: (i % 12) + 1 }));
   setRecords(recordsRaw);
+  AUTHOR_RUNNER = Object.fromEntries((Array.isArray(authorsRaw) ? authorsRaw : []).map(r => [String(r.author).toLowerCase(), r.ownerId]));
   ROUTE_SIGS = Object.fromEntries(sigsRaw.filter(r => Array.isArray(r.sig) && r.sig.length).map(r => [r.activityId, r.sig]));
   groupCache = { src: null, len: -1, sessions: [] }; // fingerprints arrived: detection must run again
   PROFILES = Object.fromEntries(profilesRaw.map(p => [p.ownerId, p]));
