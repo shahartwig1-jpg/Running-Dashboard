@@ -257,7 +257,8 @@
   }
   .card td { padding: 7px 8px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
   .card tr:last-child td { border-bottom: none; }
-  .runner-cell { display: inline-flex; align-items: center; gap: 7px; }
+  .runner-cell { display: inline-flex; align-items: center; gap: 7px; vertical-align: middle; }
+  .runner-cell + .rec-badge { vertical-align: middle; }
   .device { color: var(--text-muted); font-size: 12px; }
   #tbody tr { cursor: pointer; }
   #tbody tr:hover td { background: var(--grid); }
@@ -376,7 +377,7 @@
   .gs-table tbody tr[data-open-activity]:hover td { background: var(--grid); }
   .gs-table .gs-rank { width: 30px; text-align: center; }
   .gs-table tr.gs-me td { background: color-mix(in srgb, var(--accent) 10%, transparent); }
-  .avatar.sm { flex: 0 0 26px; width: 26px; height: 26px; font-size: 12px; }
+  .avatar.sm { flex: 0 0 32px; width: 32px; height: 32px; font-size: 13px; }
   .gs-others { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
   .gs-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 4px; }
   .gs-photos button { padding: 0; border: none; background: var(--grid); border-radius: 8px; cursor: pointer; aspect-ratio: 4 / 3; overflow: hidden; }
