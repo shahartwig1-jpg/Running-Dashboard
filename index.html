@@ -124,7 +124,7 @@
   .jump-nav::-webkit-scrollbar { display: none; }
   .jump-nav button { flex: 0 0 auto; font: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--text-secondary); background: none; border: 1px solid var(--border); border-radius: 999px; padding: 5px 13px; cursor: pointer; }
   .jump-nav button:hover { color: var(--accent); border-color: var(--accent); }
-  #tiles, #groupCard, #sleepCard, #planCard, #racesCard, #feedCard, #highlightCard { scroll-margin-top: 56px; }
+  #tiles, #groupCard, #trendCard, #planCard, #racesCard, #feedCard, #highlightCard { scroll-margin-top: 56px; }
   .filters { display: flex; gap: 8px; margin-bottom: 18px; }
   .filters button {
     font: inherit; font-size: 13px; cursor: pointer;
@@ -578,17 +578,11 @@
       <div class="sub" id="barSub"></div>
       <div id="barChart"></div>
     </div>
-    <div class="card">
-      <h2>Km per weekday</h2>
-      <div class="sub" id="weekdaySub"></div>
-      <div id="weekdayChart"></div>
+    <div class="card" id="trendCard">
+      <h2>Weekly distance</h2>
+      <div class="sub" id="trendSub"></div>
+      <div id="trendChart"></div>
     </div>
-  </div>
-
-  <div class="card" id="sleepCard">
-    <h2>Avg sleep hours</h2>
-    <div class="sub" id="sleepSub"></div>
-    <div id="sleepChart"></div>
   </div>
 
   <div class="card" id="planCard">
@@ -1081,37 +1075,6 @@ function fmtHoursMin(hours) {
   return `${h}:${String(m).padStart(2, "0")} hours`;
 }
 
-function renderSleep() {
-  const card = document.getElementById("sleepCard");
-  card.style.display = "";
-  const { start: wStart, end: wEnd } = weekBounds();
-  const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const fromDay = ymd(wStart), toDay = ymd(wEnd);
-  document.getElementById("sleepSub").textContent =
-    `${fmtDateEn(wStart)} – ${fmtDateEn(wEnd)}` + (weekOffset === 0 ? " (this week)" : "") +
-    (selectedRunnerId !== null ? " · " + runnerById(selectedRunnerId).name : "");
-
-  const runnersToShow = selectedRunnerId !== null ? RUNNERS.filter(r => r.id === selectedRunnerId) : RUNNERS;
-  const per = runnersToShow.map(r => {
-    const nights = SLEEP.filter(s => s.ownerId === r.id && s.sleepSecs != null && s.date >= fromDay && s.date <= toDay);
-    const avgHours = nights.length ? nights.reduce((s, n) => s + n.sleepSecs, 0) / nights.length / 3600 : null;
-    return { r, avgHours, nights: nights.length };
-  }).sort((a, b) => (b.avgHours ?? -1) - (a.avgHours ?? -1));
-
-  const el = document.getElementById("sleepChart");
-  if (!per.some(p => p.avgHours != null)) {
-    el.innerHTML = `<div class="empty-note">No sleep data yet</div>`;
-    return;
-  }
-  const max = Math.max(...per.map(p => p.avgHours || 0), 1);
-  const noSleep = per.filter(p => p.avgHours == null);
-  el.innerHTML = per.filter(p => p.avgHours != null).map(p => `
-    <div class="bar-row">
-      <div class="bar-name">${runnerAvatarHtml(p.r, "sm")}${esc(p.r.name)}</div>
-      <div class="bar-track">${p.avgHours != null ? `<div class="bar-fill" style="width:${(p.avgHours / max * 100).toFixed(1)}%;background:${colorOf(p.r)}"></div>` : ""}</div>
-      <div class="bar-val">${fmtHoursMin(p.avgHours)}</div>
-    </div>`).join("") + (noSleep.length && selectedRunnerId === null ? `<div class="idle-note">No sleep data: ${noSleep.map(p => esc(p.r.name)).join(", ")}</div>` : "");
-}
 
 function renderPlan() {
   const card = document.getElementById("planCard");
@@ -1269,67 +1232,55 @@ async function saveSharedWorkout(weekStartStr, weekday, text, ownerIds) {
   notifyPush({ type: "plan", ownerIds });
 }
 
-function renderWeekday() {
-  // The viewed calendar week (Sun -> Sat, see weekOffset), independent of the 7/30-day
-  // toggle above, so every bar maps to exactly one real date.
-  const { start } = weekBounds();
-  const dayDates = [...Array(7).keys()].map(i => new Date(start.getTime() + i * DAY));
-  const acts = thisWeekActs();
-
-  const rangeLabel = `${fmtDateEn(dayDates[0])} – ${fmtDateEn(dayDates[6])}`;
-  document.getElementById("weekdaySub").textContent =
-    rangeLabel + (selectedRunnerId !== null ? " · " + runnerById(selectedRunnerId).name : "");
-
-  const el = document.getElementById("weekdayChart");
-  if (!acts.length) {
-    el.innerHTML = `<div class="empty-note">No runs this week</div>`;
-    return;
-  }
-
-  const sums = new Array(7).fill(0), counts = new Array(7).fill(0);
-  acts.forEach(a => {
-    const d = new Date(a.startTimeInSeconds * 1000).getDay();
-    sums[d] += km(a);
-    counts[d]++;
+// The last 8 weeks of distance: the whole group in "All", one runner when a name is picked. The viewed week is the
+// solid bar; tapping any bar jumps to that week (the same thing the Previous/Next week buttons do).
+const TREND_WEEKS = 8;
+function renderTrend() {
+  const nowStart = weekStart(TODAY).getTime();
+  const weeks = [...Array(TREND_WEEKS).keys()].map(i => {
+    const startMs = nowStart - (TREND_WEEKS - 1 - i) * 7 * DAY;
+    const list = ACTIVITIES.filter(a => matchesRunner(a) && a.startTimeInSeconds * 1000 >= startMs && a.startTimeInSeconds * 1000 < startMs + 7 * DAY);
+    return { startMs, km: list.reduce((t, a) => t + km(a), 0), runs: list.length, ago: TREND_WEEKS - 1 - i };
   });
+  document.getElementById("trendSub").textContent =
+    "Last 8 weeks · tap a bar to view that week" + (selectedRunnerId !== null ? " · " + runnerById(selectedRunnerId).name : "");
+  const el = document.getElementById("trendChart");
+  if (!weeks.some(w => w.runs)) { el.innerHTML = `<div class="empty-note">No runs in the last 8 weeks</div>`; return; }
 
-  const W = 480, H = 250, m = { t: 20, r: 14, b: 36, l: 34 };
-  const maxSum = Math.max(...sums);
-  const niceMax = Math.ceil((maxSum || 1) / 5) * 5 || 5;
-  const bw = (W - m.l - m.r) / 7;
+  const W = 480, H = 250, m = { t: 22, r: 14, b: 30, l: 38 };
+  const niceMax = Math.ceil((Math.max(...weeks.map(w => w.km)) || 1) / 4 / 5) * 5 * 4 || 20;
+  const bw = (W - m.l - m.r) / TREND_WEEKS;
   const y = v => H - m.b - v / niceMax * (H - m.t - m.b);
   const ink = getComputedStyle(document.documentElement);
-  const muted = ink.getPropertyValue("--text-muted").trim();
-  const secondary = ink.getPropertyValue("--text-secondary").trim();
-  const grid = ink.getPropertyValue("--grid").trim();
-  const baseline = ink.getPropertyValue("--baseline").trim();
-  const barColor = selectedRunnerId !== null ? colorOf(runnerById(selectedRunnerId)) : ink.getPropertyValue("--accent").trim();
+  const muted = ink.getPropertyValue("--text-muted").trim(), secondary = ink.getPropertyValue("--text-secondary").trim();
+  const grid = ink.getPropertyValue("--grid").trim(), baseline = ink.getPropertyValue("--baseline").trim();
+  const accent = ink.getPropertyValue("--accent").trim();
 
   let g = "";
   for (let i = 0; i <= 4; i++) {
     const v = niceMax * i / 4;
     g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="${v === 0 ? baseline : grid}" stroke-width="1"/>` +
-         `<text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end" font-size="10" fill="${muted}">${v}</text>`;
+         `<text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end" font-size="10" fill="${muted}">${Math.round(v)}</text>`;
   }
-  for (let i = 0; i < 7; i++) {
-    const bx = m.l + i * bw, barTop = y(sums[i]), barH = Math.max((H - m.b) - barTop, 0);
-    const cx = bx + bw / 2;
-    g += `<rect data-day="${i}" x="${bx + 4}" y="${barTop}" width="${Math.max(bw - 8, 2)}" height="${barH}" rx="4" ry="4" fill="${barColor}"/>`;
-    if (sums[i] > 0) g += `<text x="${cx}" y="${barTop - 6}" text-anchor="middle" font-size="10" fill="${secondary}">${fmtKm(sums[i])}</text>`;
-    g += `<text x="${cx}" y="${H - 22}" text-anchor="middle" font-size="11" fill="${muted}">${WEEKDAY_EN[i]}</text>`;
-    g += `<text x="${cx}" y="${H - 8}" text-anchor="middle" font-size="10" fill="${muted}">${fmtDateEn(dayDates[i])}</text>`;
-  }
-
+  weeks.forEach((w, i) => {
+    const bx = m.l + i * bw, top = y(w.km), cx = bx + bw / 2, viewed = w.ago === -weekOffset;
+    g += `<rect data-ago="${w.ago}" x="${bx + 5}" y="${top}" width="${Math.max(bw - 10, 2)}" height="${Math.max((H - m.b) - top, 0)}" rx="4" fill="${accent}" opacity="${viewed ? 1 : 0.35}" style="cursor:pointer"/>`;
+    if (w.km > 0) g += `<text x="${cx}" y="${top - 6}" text-anchor="middle" font-size="10" font-weight="${viewed ? 700 : 400}" fill="${viewed ? ink.getPropertyValue("--text-primary").trim() : secondary}">${Math.round(w.km)}</text>`;
+    g += `<text x="${cx}" y="${H - 10}" text-anchor="middle" font-size="10" fill="${muted}" font-weight="${viewed ? 700 : 400}">${fmtDateEn(new Date(w.startMs))}</text>`;
+  });
   el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${g}</svg>`;
-  el.querySelectorAll("rect[data-day]").forEach(rect => {
-    const i = +rect.dataset.day;
+  el.querySelectorAll("rect[data-ago]").forEach(rect => {
+    const w = weeks.find(x => x.ago === +rect.dataset.ago);
     rect.addEventListener("mousemove", e => showTip(
-      `<div class="t-title">${WEEKDAY_EN[i]} · ${fmtDateEn(dayDates[i])}</div>
-       <div class="t-row">Total km<b>${fmtKm(sums[i])}</b></div>
-       <div class="t-row">Runs<b>${counts[i]}</b></div>`, e.clientX, e.clientY));
+      `<div class="t-title">${fmtDateEn(new Date(w.startMs))} – ${fmtDateEn(new Date(w.startMs + 6 * DAY))}</div>
+       <div class="t-row">Distance<b>${fmtKm(w.km)} km</b></div><div class="t-row">Runs<b>${w.runs}</b></div>`, e.clientX, e.clientY));
     rect.addEventListener("mouseleave", hideTip);
+    rect.addEventListener("click", () => { hideTip(); weekOffset = -w.ago; refreshWeekViews(); });
   });
 }
+
+// Everything that follows the viewed week.
+function refreshWeekViews() { renderWeekNav(); renderTiles(); renderBars(); renderTrend(); renderHighlights(); }
 
 function renderFeed() {
   // For a single runner, "Recent activities" shows their full history in growing weekly
@@ -1806,6 +1757,17 @@ function openProfile(ownerId) {
     fast5 ? pbRow("Fastest 5 km+", `${fmtPace(paceOf(fast5))} /km`, `${fmtKm(km(fast5))} km · ${recDate(fast5.startTimeInSeconds)}`, fast5.activityId) : "",
   ].join("") || `<div class="empty-note" style="padding:8px 0">No runs yet</div>`;
 
+  // Sleep is personal, so it lives here and not on the home page.
+  const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const sleepAvg = nDays => {
+    const from = ymd(new Date(Date.now() - nDays * DAY));
+    const nights = SLEEP.filter(x => x.ownerId === ownerId && x.sleepSecs != null && x.date >= from);
+    return nights.length ? { hours: nights.reduce((t, x) => t + x.sleepSecs, 0) / nights.length / 3600, n: nights.length } : null;
+  };
+  const sl7 = sleepAvg(7), sl30 = sleepAvg(30);
+  const sleepHtml = sl7 || sl30 ? `<div class="section-title">Sleep</div><div class="rec-history">${[["Last 7 nights", sl7], ["Last 30 nights", sl30]].filter(([, v]) => v)
+    .map(([label, v]) => `<div class="rec-history-row" style="cursor:default"><span style="min-width:110px;color:var(--text-muted)">${label}</span><b>${fmtHoursMin(v.hours)}</b><span class="gs-session-meta">average · ${v.n} night${v.n > 1 ? "s" : ""} recorded</span></div>`).join("")}</div>` : "";
+
   const sessions = groupSessions().filter(s => s.runnerIds.has(ownerId));
   const sessionsHtml = sessions.length ? `<div class="section-title">Group sessions (${sessions.length})</div><div class="rec-history">${sessions.slice(0, 5).map(s => {
     const b = s.blocks.find(x => x.role === "main") || s.blocks.slice().sort((x, y) => y.avgKm - x.avgKm)[0];
@@ -1839,7 +1801,7 @@ function openProfile(ownerId) {
     <div class="chart-note" style="margin:-8px 0 8px">Totals cover the last 90 days</div>
     <div class="section-title">Personal bests</div>
     <div class="rec-history">${pbHtml}</div>
-    ${sessionsHtml}
+    ${sleepHtml}${sessionsHtml}
     <div class="section-title">Recent runs</div>
     <div class="rec-history">${recent || '<div class="empty-note" style="padding:8px 0">No runs yet</div>'}</div>`;
   document.getElementById("overlay").style.display = "block";
@@ -2332,7 +2294,7 @@ document.body.addEventListener("click", e => {
 
 // A short "jump to" bar: the page is long, and only the sections that are showing get a button.
 function renderJumpNav() {
-  const targets = [["tiles", "This week"], ["groupCard", "Sessions"], ["sleepCard", "Sleep"], ["planCard", "Plan"], ["racesCard", "Races"], ["feedCard", "Runs"]];
+  const targets = [["tiles", "This week"], ["groupCard", "Sessions"], ["planCard", "Plan"], ["racesCard", "Races"], ["feedCard", "Runs"]];
   document.getElementById("jumpNav").innerHTML = targets
     .filter(([id]) => { const el = document.getElementById(id); return el && getComputedStyle(el).display !== "none"; })
     .map(([id, label]) => `<button type="button" data-jump="${id}">${label}</button>`).join("");
@@ -2342,7 +2304,7 @@ document.getElementById("jumpNav").addEventListener("click", e => {
   if (b) document.getElementById(b.dataset.jump)?.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
-function renderAll() { renderRunnerFilters(); renderProfileLink(); renderWeekNav(); renderHighlights(); renderRaces(); renderGroupSessions(); renderTiles(); renderBars(); renderSleep(); renderPlan(); renderWeekday(); renderFeed(); renderJumpNav(); }
+function renderAll() { renderRunnerFilters(); renderProfileLink(); renderWeekNav(); renderHighlights(); renderRaces(); renderGroupSessions(); renderTiles(); renderBars(); renderPlan(); renderTrend(); renderFeed(); renderJumpNav(); }
 
 document.getElementById("runnerFilters").addEventListener("click", e => {
   const btn = e.target.closest("button[data-runner]");
@@ -2361,12 +2323,12 @@ document.getElementById("planNext").addEventListener("click", () => { planWeekOf
 
 document.getElementById("weekPrev").addEventListener("click", () => {
   weekOffset--;
-  renderWeekNav(); renderTiles(); renderBars(); renderSleep(); renderWeekday(); renderHighlights();
+  refreshWeekViews();
 });
 document.getElementById("weekNext").addEventListener("click", () => {
   if (weekOffset >= 0) return; // can't browse into weeks that haven't happened yet
   weekOffset++;
-  renderWeekNav(); renderTiles(); renderBars(); renderSleep(); renderWeekday(); renderHighlights();
+  refreshWeekViews();
 });
 
 document.getElementById("feedLoadMore").addEventListener("click", () => {
