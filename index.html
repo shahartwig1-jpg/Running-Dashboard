@@ -21,6 +21,7 @@
     --grid:           #e1e0d9;
     --baseline:       #c3c2b7;
     --border:         rgba(11,11,11,0.10);
+    --accent: #e34948;
     --series-1: #2a78d6;
     --series-2: #1baf7a;
     --series-3: #eda100;
@@ -49,6 +50,7 @@
       --grid:           #2c2c2a;
       --baseline:       #383835;
       --border:         rgba(255,255,255,0.10);
+      --accent: #e66767;
       --series-1: #3987e5;
       --series-2: #199e70;
       --series-3: #c98500;
@@ -77,6 +79,7 @@
     --grid:           #2c2c2a;
     --baseline:       #383835;
     --border:         rgba(255,255,255,0.10);
+    --accent: #e66767;
     --series-1: #3987e5;
     --series-2: #199e70;
     --series-3: #c98500;
@@ -251,8 +254,16 @@
     border-radius: 999px; padding: 3px 9px;
   }
   .photo-toggle-btn:hover { background: rgba(0,0,0,0.7); }
-  .feed-engagement { display: flex; gap: 14px; font-size: 12px; color: var(--text-muted); }
-  .feed-engagement span.active { color: var(--series-1); font-weight: 600; }
+  .feed-engagement { display: flex; align-items: center; gap: 14px; font-size: 12px; color: var(--text-muted); }
+  .notify-prompt { display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap; font-size: 13px; color: var(--text-secondary); background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; }
+  .notify-prompt[hidden] { display: none; }
+  .notify-prompt-actions { display: flex; gap: 8px; }
+  .feed-like { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-secondary); background: none; border: 1px solid var(--border); border-radius: 999px; padding: 5px 13px; cursor: pointer; }
+  .feed-like svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .feed-like:hover { border-color: var(--baseline); }
+  .feed-like.given { color: var(--accent); border-color: var(--accent); }
+  .feed-like.given svg { fill: currentColor; }
+  .feed-like:disabled { opacity: 0.5; cursor: default; }
 
   /* Table (still used inside the detail panel for laps) */
   .card table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -535,6 +546,11 @@
       </header>
       <div class="subtitle" id="subtitle">Five runners · demo data simulating what will arrive once watches are really connected</div>
     </div>
+  </div>
+
+  <div id="notifyPrompt" class="notify-prompt" hidden>
+    <span>Get a notification when someone gives kudos or comments on your run.</span>
+    <span class="notify-prompt-actions"><button id="notifyPromptOn" class="week-nav-btn" type="button">Turn on</button><button id="notifyPromptLater" class="week-nav-btn" type="button">Not now</button></span>
   </div>
 
   <div class="filters" role="group" aria-label="Time range">
@@ -1396,8 +1412,8 @@ function renderFeed() {
           <img class="feed-photo" data-photo-for="${esc(a.activityId)}">
         </div>
         <div class="feed-engagement">
-          <span data-kudos-for="${esc(a.activityId)}">👍 –</span>
-          <span data-comments-for="${esc(a.activityId)}">💬 –</span>
+          <button type="button" class="feed-like" data-like-for="${esc(a.activityId)}" title="Give kudos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg><span data-kudos-for="${esc(a.activityId)}">–</span></button>
+          <span class="feed-comments" data-comments-for="${esc(a.activityId)}">💬 –</span>
         </div>
       </div>
     </div>`;
@@ -1437,6 +1453,31 @@ async function loadFeedMaps(ids) {
   });
 }
 
+function setLikeUi(btn, n, given) {
+  btn.classList.toggle("given", given);
+  btn.querySelector("[data-kudos-for]").textContent = n || "–";
+}
+// Kudos straight from the list, without opening the run. Capture phase so the click never reaches the card's own
+// "open this run" handler. Adding a like also asks the notify function to tell the run's owner.
+document.getElementById("feedList").addEventListener("click", async e => {
+  const btn = e.target.closest("[data-like-for]");
+  if (!btn) return;
+  e.stopPropagation();
+  const token = getSession()?.access_token;
+  if (!token || btn.disabled) return;
+  const id = btn.dataset.likeFor, me = authorNameFromSession();
+  const wasGiven = btn.classList.contains("given");
+  const count = Number(btn.querySelector("[data-kudos-for]").textContent) || 0;
+  setLikeUi(btn, Math.max(0, count + (wasGiven ? -1 : 1)), !wasGiven); // instant feedback; undone below if the save fails
+  btn.disabled = true;
+  try {
+    if (wasGiven) await supaDelete(`likes?activityId=eq.${encodeURIComponent(id)}&authorName=eq.${encodeURIComponent(me)}`, token);
+    else { await supaPost("likes", { activityId: id, authorName: me }, token); notifyPush({ type: "like", activityId: id }); }
+  } catch {
+    setLikeUi(btn, count, wasGiven);
+  } finally { btn.disabled = false; }
+}, true);
+
 async function loadFeedEngagement(activityIds) {
   const session = getSession();
   if (!session?.access_token || !activityIds.length) return;
@@ -1444,14 +1485,10 @@ async function loadFeedEngagement(activityIds) {
   const idList = activityIds.map(id => encodeURIComponent(id)).join(",");
 
   try {
-    const likes = await supaGet(`likes?activityId=in.(${idList})&select=activityId`, token);
-    const counts = {};
-    likes.forEach(row => { counts[row.activityId] = (counts[row.activityId] || 0) + 1; });
-    document.querySelectorAll("[data-kudos-for]").forEach(el => {
-      const n = counts[el.dataset.kudosFor] || 0;
-      el.textContent = `👍 ${n || "–"}`;
-      if (n) el.classList.add("active");
-    });
+    const likes = await supaGet(`likes?activityId=in.(${idList})&select=activityId,authorName`, token);
+    const me = authorNameFromSession(), counts = {}, mine = new Set();
+    likes.forEach(row => { counts[row.activityId] = (counts[row.activityId] || 0) + 1; if (row.authorName === me) mine.add(row.activityId); });
+    document.querySelectorAll("[data-like-for]").forEach(btn => setLikeUi(btn, counts[btn.dataset.likeFor] || 0, mine.has(btn.dataset.likeFor)));
   } catch { }
 
   try {
@@ -2644,7 +2681,10 @@ async function updateNotifyBtn() {
   if (!getSession()?.access_token || (!pushSupported() && !isIOS())) { btn.style.display = "none"; return; }
   btn.style.display = "";
   const sub = await currentPushSubscription().catch(() => null);
-  btn.textContent = sub && Notification.permission === "granted" ? "🔔 On" : "🔔 Notify me";
+  const on = !!sub && Notification.permission === "granted";
+  btn.textContent = on ? "🔔 On" : "🔔 Notify me";
+  let dismissedAt = 0; try { dismissedAt = Number(localStorage.getItem("notifyPromptLater")) || 0; } catch { }
+  document.getElementById("notifyPrompt").hidden = on || Date.now() - dismissedAt < 14 * 86400000; // nudge again after two weeks
 }
 
 async function enablePush() {
@@ -2684,6 +2724,11 @@ async function disablePush() {
   await sub.unsubscribe();
 }
 
+document.getElementById("notifyPromptOn").addEventListener("click", () => document.getElementById("notifyBtn").click());
+document.getElementById("notifyPromptLater").addEventListener("click", () => {
+  try { localStorage.setItem("notifyPromptLater", String(Date.now())); } catch { }
+  document.getElementById("notifyPrompt").hidden = true;
+});
 document.getElementById("notifyBtn").addEventListener("click", async e => {
   const btn = e.currentTarget;
   btn.disabled = true;

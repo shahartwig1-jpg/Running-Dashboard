@@ -80,6 +80,15 @@ async function coachEmails(): Promise<string[]> {
   return emails.length ? emails : COACH_EMAILS_FALLBACK;
 }
 
+// The runner a login belongs to, by name ("Omer"), so notifications say who did it instead of showing the
+// short login name ("omer.goren10"). Falls back to the short name when the login isn't linked to a runner.
+async function runnerNameForEmail(email: string): Promise<string | null> {
+  const link = await sb(`runner_emails?select=ownerId&email=eq.${encodeURIComponent(email)}&limit=1`).catch(() => []) as { ownerId: string }[];
+  if (!link?.[0]) return null;
+  const r = await sb(`runners?select=name&id=eq.${encodeURIComponent(link[0].ownerId)}&limit=1`).catch(() => []) as { name: string }[];
+  return r?.[0]?.name ?? null;
+}
+
 // runner id -> login email, via the runner_emails table (empty until a runner has a login).
 async function emailMapForRunners(ownerIds: string[]) {
   const map: Record<string, string> = {};
@@ -153,7 +162,7 @@ Deno.serve(async req => {
     const user = await getUser((req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, ""));
     if (!user?.email) return json({ error: "not logged in" }, 401);
     const actorEmail = String(user.email).toLowerCase();
-    const actor = actorEmail.split("@")[0];
+    const actor = (await runnerNameForEmail(actorEmail)) ?? actorEmail.split("@")[0];
     const COACH_EMAILS = await coachEmails();
     const isCoach = COACH_EMAILS.includes(actorEmail);
 
