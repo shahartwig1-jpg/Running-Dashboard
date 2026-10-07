@@ -393,6 +393,16 @@
   .profile-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
   .profile-name { font-size: 18px; font-weight: 700; }
   .profile-edit { margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .body-value { white-space: nowrap; }
+  .body-value .unit { font-size: 11px; font-weight: 500; color: var(--text-muted); margin-inline-start: 3px; }
+  .body-edit-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -6px 0 12px; }
+  .body-edit-form { display: flex; align-items: flex-end; gap: 8px 10px; flex-wrap: wrap; margin: 0 0 16px; }
+  .body-edit-form[hidden] { display: none; }
+  .body-field { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--text-muted); }
+  .body-field input {
+    width: 92px; font: inherit; font-size: 14px; padding: 6px 8px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--page); color: var(--text-primary);
+  }
   .route-map { height: 260px; border-radius: 10px; overflow: hidden; isolation: isolate; background: var(--grid); }
   .route-map.leaflet-container { background: var(--grid); } /* Leaflet's own stylesheet would paint it light grey in dark mode */
   .route-map .leaflet-control-attribution { font-size: 9px; padding: 0 4px; }
@@ -1737,6 +1747,8 @@ document.getElementById("sheet").addEventListener("click", e => {
 
 /* ---------- Runner profiles (supabase/profiles.sql) ---------- */
 let PROFILES = {};      // runner id -> { photoUrl }
+let FITNESS = {};       // runner id -> runner_fitness row (VO2max, resting HR, max/threshold HR, ...), from the sync
+let BODY = {};          // runner id -> runner_body row (birthYear, heightCm, weightKg); the database only returns your own, or all for a coach
 let MY_RUNNER_ID = null; // which runner the logged-in person is (null until their login is linked in runner_emails)
 const profilePhoto = id => safeUrl(PROFILES[id]?.photoUrl);
 
@@ -1801,6 +1813,8 @@ function openProfile(ownerId) {
 
   const recent = mine.slice(0, 5).map(a => `<div class="rec-history-row" data-open-activity="${esc(a.activityId)}"><span>${recDate(a.startTimeInSeconds)}</span><b>${fmtKm(km(a))} km</b><span class="gs-session-meta">${fmtDur(a.durationInSeconds)} · ${fmtPace(paceOf(a))} /km</span></div>`).join("");
 
+  const bodyHtml = bodyFitnessHtml(ownerId);
+
   document.getElementById("sheet").innerHTML = `
     <div class="sheet-head">
       <div class="profile-head">
@@ -1820,6 +1834,7 @@ function openProfile(ownerId) {
       <div class="mini-tile"><div class="label">Longest</div><div class="value">${longest ? fmtKm(km(longest)) + " km" : "-"}</div></div>
     </div>
     <div class="chart-note" style="margin:-8px 0 8px">Totals cover the last 90 days</div>
+    ${bodyHtml}
     <div class="section-title">Personal bests</div>
     <div class="rec-history">${pbHtml}</div>
     ${sleepHtml}${sessionsHtml}
@@ -1828,6 +1843,68 @@ function openProfile(ownerId) {
   document.getElementById("overlay").style.display = "block";
   document.getElementById("closeSheet").addEventListener("click", closeDetail);
   document.getElementById("profilePhotoInput")?.addEventListener("change", e => changeProfilePhoto(ownerId, e.target.files[0]));
+  document.getElementById("bodyEditBtn")?.addEventListener("click", () => {
+    const f = document.getElementById("bodyEditForm");
+    f.hidden = !f.hidden;
+  });
+  document.getElementById("bodyEditForm")?.addEventListener("submit", e => { e.preventDefault(); saveBody(ownerId, e.target); });
+}
+
+/* Body & fitness on the profile page. Fitness numbers come from Intervals.icu through the sync (runner_fitness,
+   the whole group can read them). Age, height and weight (runner_body) are only ever returned by the database to
+   the runner themself and to coaches; age and height are typed in here because Intervals.icu doesn't have them. */
+function bodyFitnessHtml(ownerId) {
+  const f = FITNESS[ownerId] || {}, b = BODY[ownerId] || {};
+  const n = v => (v == null || v === "" ? null : Number(v));
+  const form = n(f.fitness) != null && n(f.fatigue) != null ? Math.round(n(f.fitness) - n(f.fatigue)) : null;
+  const tiles = [
+    ["Age", n(b.birthYear) ? new Date().getFullYear() - n(b.birthYear) : null],
+    ["Weight", n(b.weightKg) ? +n(b.weightKg).toFixed(1) : null, "kg"],
+    ["Height", n(b.heightCm), "cm"],
+    ["VO2max", n(f.vo2max) ? Math.round(n(f.vo2max)) : null],
+    ["Resting HR", n(f.restingHR), "bpm"],
+    ["HRV", n(f.hrv) ? Math.round(n(f.hrv)) : null, "ms"],
+    ["Max HR", n(f.maxHR), "bpm"],
+    ["Threshold HR", n(f.lthr), "bpm"],
+    ["Threshold pace", n(f.thresholdPace) ? fmtPace(n(f.thresholdPace)) : null, "/km"],
+    ["Fitness", n(f.fitness) != null ? Math.round(n(f.fitness)) : null],
+    ["Form", form != null ? (form > 0 ? "+" : "") + form : null],
+  ].filter(([, v]) => v != null && v !== 0);
+  const editable = canEditProfile(ownerId);
+  if (!tiles.length && !editable) return "";
+  const val = v => (v == null ? "" : esc(String(v)));
+  const field = (label, name, value, min, max, step) =>
+    `<label class="body-field">${label}<input type="number" name="${name}" value="${val(value)}" min="${min}" max="${max}" step="${step}" inputmode="decimal"></label>`;
+  return `<div class="section-title">Body &amp; fitness</div>
+    ${tiles.length ? `<div class="mini-tiles">${tiles.map(([label, v, unit]) => `<div class="mini-tile"><div class="label">${label}</div><div class="value body-value">${esc(String(v))}${unit ? `<span class="unit">${unit}</span>` : ""}</div></div>`).join("")}</div>` : ""}
+    ${editable ? `
+      <div class="body-edit-row">
+        <button type="button" class="add-photo-btn" id="bodyEditBtn">${b.birthYear || b.heightCm ? "Edit age, height, weight" : "Add age, height, weight"}</button>
+        <span class="chart-note" style="margin:0">Age, height and weight: only you and the coaches see them</span>
+      </div>
+      <form id="bodyEditForm" class="body-edit-form" hidden>
+        ${field("Birth year", "birthYear", b.birthYear, 1920, 2020, 1)}
+        ${field("Height (cm)", "heightCm", b.heightCm, 100, 230, 1)}
+        ${field("Weight (kg)", "weightKg", b.weightKg, 25, 250, 0.1)}
+        <button type="submit" class="week-nav-btn">Save</button>
+        <span id="bodyEditStatus" class="chart-note" style="margin:0"></span>
+        <div class="chart-note" style="margin:0; flex-basis:100%">Weight is replaced by the one in Intervals.icu when it has one.</div>
+      </form>` : ""}`;
+}
+
+async function saveBody(ownerId, form) {
+  const status = document.getElementById("bodyEditStatus");
+  const get = name => { const v = form.elements[name].value.trim(); return v === "" ? null : Number(v); };
+  const row = { ownerId, birthYear: get("birthYear"), heightCm: get("heightCm"), weightKg: get("weightKg"), updatedAt: new Date().toISOString() };
+  status.textContent = "Saving…";
+  try {
+    await supaUpsert("runner_body", [row], "ownerId", getSession()?.access_token);
+    BODY[ownerId] = row;
+    openProfile(ownerId);
+  } catch (e) {
+    console.error("saving body numbers failed", e);
+    status.textContent = `Couldn't save (${e.message}).`;
+  }
 }
 
 // Shrinks the picked photo (phones take multi-MB pictures) to a 640 px JPEG before uploading.
@@ -2712,7 +2789,7 @@ async function loadFromSupabase(accessToken) {
   const cutoffSec = Math.floor(Date.now() / 1000) - 90 * 86400;
   const cutoffDate = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
 
-  const [runnersRaw, activitiesRaw, sleepRaw, planRaw, highlightsRaw, racesRaw, rolesRaw, recordsRaw, profilesRaw, myRunnerId, sigsRaw, authorsRaw, stepsRaw] = await Promise.all([
+  const [runnersRaw, activitiesRaw, sleepRaw, planRaw, highlightsRaw, racesRaw, rolesRaw, recordsRaw, profilesRaw, myRunnerId, sigsRaw, authorsRaw, stepsRaw, fitnessRaw, bodyRaw] = await Promise.all([
     supaGet(`runners?select=id,name,device&order=id`, accessToken),
     supaGet(`activities?select=*&startTimeInSeconds=gte.${cutoffSec}&order=startTimeInSeconds.desc`, accessToken),
     supaGet(`sleep?select=*&date=gte.${cutoffDate}`, accessToken),
@@ -2728,6 +2805,8 @@ async function loadFromSupabase(accessToken) {
     supaGet(`activity_details?select=activityId,sig:streams->sig&fetchedAt=gte.${cutoffDate}&order=fetchedAt.desc&limit=1000`, accessToken).catch(() => []),
     supaRpc("author_runners", accessToken).catch(() => []), // author_names.sql not run yet -> short names stay, nothing breaks
     supaGet(`daily_steps?select=ownerId,date,steps&date=gte.${cutoffDate}&limit=1000`, accessToken).catch(() => []), // daily_steps.sql not run yet -> empty graph, nothing breaks
+    supaGet(`runner_fitness?select=*`, accessToken).catch(() => []), // runner_stats.sql not run yet -> no fitness rows, nothing breaks
+    supaGet(`runner_body?select=*`, accessToken).catch(() => []), // only your own row (or all, for a coach) comes back
   ]);
 
   RUNNERS = runnersRaw.map((r, i) => ({ ...r, slot: (i % 12) + 1 }));
@@ -2736,6 +2815,8 @@ async function loadFromSupabase(accessToken) {
   ROUTE_SIGS = Object.fromEntries(sigsRaw.filter(r => Array.isArray(r.sig) && r.sig.length).map(r => [r.activityId, r.sig]));
   groupCache = { src: null, len: -1, sessions: [] }; // fingerprints arrived: detection must run again
   PROFILES = Object.fromEntries(profilesRaw.map(p => [p.ownerId, p]));
+  FITNESS = Object.fromEntries((Array.isArray(fitnessRaw) ? fitnessRaw : []).map(p => [p.ownerId, p]));
+  BODY = Object.fromEntries((Array.isArray(bodyRaw) ? bodyRaw : []).map(p => [p.ownerId, p]));
   MY_RUNNER_ID = typeof myRunnerId === "string" ? myRunnerId : null;
   // Only overwrite the hardcoded fallback once roles.sql has actually been run and seeded —
   // an empty/missing table must never turn into "nobody is a coach".
