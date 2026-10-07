@@ -1,4 +1,7 @@
--- Run this once in the Supabase SQL Editor (after profiles.sql, which created can_edit_profile()).
+-- RUN THIS ONCE in the Supabase SQL Editor (2026-10-07). Safe to run again: every step checks first.
+-- Part 1: profile numbers (same as runner_stats.sql). Part 2: the hidden column (same as hide_missing_activities.sql).
+
+-- ===== Part 1: profile numbers =====
 --
 -- Extra numbers on each runner's profile page, in two tables because they have different readers:
 --   * runner_fitness: everything that comes from Intervals.icu, which the whole group can see (weight, VO2max,
@@ -55,3 +58,13 @@ create policy "own body or coach: update" on runner_body
   for update to authenticated
   using (public.can_edit_profile("ownerId"))
   with check (public.can_edit_profile("ownerId"));
+
+-- ===== Part 2: hide runs that drop out of the Intervals.icu list without a confirmed delete =====
+-- Supports auto-hiding runs that vanish from Intervals.icu's activity list without
+-- returning a real 404 on direct lookup (confirmed real, undocumented platform quirk —
+-- not something fetch-data.js can tell apart from an actual deletion). A confirmed 404
+-- still triggers a real delete; this column is for the "can't be sure" case, so the run
+-- disappears from the dashboard automatically either way, but nothing is destroyed if it
+-- turns out to just be a temporary listing quirk.
+
+alter table activities add column if not exists hidden boolean not null default false;

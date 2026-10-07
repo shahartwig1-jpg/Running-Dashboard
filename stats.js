@@ -1,4 +1,4 @@
-// Profile numbers per runner (supabase/runner_stats.sql): the latest wellness values (weight, resting HR, HRV,
+// Profile numbers per runner (supabase/runner_stats.sql, table runner_fitness): the latest wellness values (weight, resting HR, HRV,
 // VO2max, fitness/fatigue) plus the athlete's own Intervals.icu settings (weight, max HR, threshold HR and pace).
 // fetch-data.js hands the raw data in during the sync and calls saveStats() at the end; every step is wrapped
 // there in try/catch, so a refused call or a missing table never stops the rest of the sync.
@@ -20,11 +20,12 @@ const latest = (rows, field) => {
 };
 
 function buildRows() {
-  const fitness = [], body = [], updatedAt = new Date().toISOString();
+  const fitness = [], updatedAt = new Date().toISOString();
   for (const [ownerId, { wellness, athlete }] of Object.entries(byRunner)) {
     const run = (athlete?.sportSettings || []).find(s => (s.types || []).includes("Run")) || {};
     const row = {
       ownerId,
+      weightKg: round1(num(latest(wellness, "weight")) ?? num(athlete?.icu_weight)),
       vo2max: round1(latest(wellness, "vo2max")),
       restingHR: num(latest(wellness, "restingHR")) ?? num(athlete?.icu_resting_hr),
       hrv: round1(latest(wellness, "hrv")),
@@ -36,19 +37,14 @@ function buildRows() {
       updatedAt,
     };
     if (Object.entries(row).some(([k, v]) => k !== "ownerId" && k !== "updatedAt" && v != null)) fitness.push(row);
-    // Only send weight when Intervals.icu has one, so a weight typed in on the profile isn't wiped by an empty sync.
-    const weightKg = round1(num(latest(wellness, "weight")) ?? num(athlete?.icu_weight));
-    if (weightKg) body.push({ ownerId, weightKg, updatedAt });
   }
-  return { fitness, body };
+  return { fitness };
 }
 
 async function saveStats() {
-  const { fitness, body } = buildRows();
-  const prefer = "resolution=merge-duplicates,return=minimal";
-  if (fitness.length) await rest("POST", "runner_fitness?on_conflict=ownerId", { body: fitness, prefer });
-  if (body.length) await rest("POST", "runner_body?on_conflict=ownerId", { body, prefer });
-  console.log(`Profile stats: fitness for ${fitness.length} runner(s), weight for ${body.length}`);
+  const { fitness } = buildRows();
+  if (fitness.length) await rest("POST", "runner_fitness?on_conflict=ownerId", { body: fitness, prefer: "resolution=merge-duplicates,return=minimal" });
+  console.log(`Profile stats saved for ${fitness.length} runner(s)`);
 }
 
 module.exports = { noteWellness, noteAthlete, saveStats, buildRows };

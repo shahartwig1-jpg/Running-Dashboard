@@ -1748,7 +1748,7 @@ document.getElementById("sheet").addEventListener("click", e => {
 /* ---------- Runner profiles (supabase/profiles.sql) ---------- */
 let PROFILES = {};      // runner id -> { photoUrl }
 let FITNESS = {};       // runner id -> runner_fitness row (VO2max, resting HR, max/threshold HR, ...), from the sync
-let BODY = {};          // runner id -> runner_body row (birthYear, heightCm, weightKg); the database only returns your own, or all for a coach
+let BODY = {};          // runner id -> runner_body row (birthYear, heightCm); the database only returns your own, or all for a coach
 let MY_RUNNER_ID = null; // which runner the logged-in person is (null until their login is linked in runner_emails)
 const profilePhoto = id => safeUrl(PROFILES[id]?.photoUrl);
 
@@ -1850,16 +1850,16 @@ function openProfile(ownerId) {
   document.getElementById("bodyEditForm")?.addEventListener("submit", e => { e.preventDefault(); saveBody(ownerId, e.target); });
 }
 
-/* Body & fitness on the profile page. Fitness numbers come from Intervals.icu through the sync (runner_fitness,
-   the whole group can read them). Age, height and weight (runner_body) are only ever returned by the database to
-   the runner themself and to coaches; age and height are typed in here because Intervals.icu doesn't have them. */
+/* Body & fitness on the profile page. Everything from Intervals.icu (weight, VO2max, heart rates, fitness...) comes
+   through the sync (runner_fitness) and the whole group can read it. Age and height (runner_body) are typed in here
+   because Intervals.icu doesn't have them, and the database only returns them to the runner and to coaches. */
 function bodyFitnessHtml(ownerId) {
   const f = FITNESS[ownerId] || {}, b = BODY[ownerId] || {};
   const n = v => (v == null || v === "" ? null : Number(v));
   const form = n(f.fitness) != null && n(f.fatigue) != null ? Math.round(n(f.fitness) - n(f.fatigue)) : null;
   const tiles = [
     ["Age", n(b.birthYear) ? new Date().getFullYear() - n(b.birthYear) : null],
-    ["Weight", n(b.weightKg) ? +n(b.weightKg).toFixed(1) : null, "kg"],
+    ["Weight", n(f.weightKg) ? +n(f.weightKg).toFixed(1) : null, "kg"],
     ["Height", n(b.heightCm), "cm"],
     ["VO2max", n(f.vo2max) ? Math.round(n(f.vo2max)) : null],
     ["Resting HR", n(f.restingHR), "bpm"],
@@ -1879,23 +1879,21 @@ function bodyFitnessHtml(ownerId) {
     ${tiles.length ? `<div class="mini-tiles">${tiles.map(([label, v, unit]) => `<div class="mini-tile"><div class="label">${label}</div><div class="value body-value">${esc(String(v))}${unit ? `<span class="unit">${unit}</span>` : ""}</div></div>`).join("")}</div>` : ""}
     ${editable ? `
       <div class="body-edit-row">
-        <button type="button" class="add-photo-btn" id="bodyEditBtn">${b.birthYear || b.heightCm ? "Edit age, height, weight" : "Add age, height, weight"}</button>
-        <span class="chart-note" style="margin:0">Age, height and weight: only you and the coaches see them</span>
+        <button type="button" class="add-photo-btn" id="bodyEditBtn">${b.birthYear || b.heightCm ? "Edit age and height" : "Add age and height"}</button>
+        <span class="chart-note" style="margin:0">Age and height: only you and the coaches see them</span>
       </div>
       <form id="bodyEditForm" class="body-edit-form" hidden>
         ${field("Birth year", "birthYear", b.birthYear, 1920, 2020, 1)}
         ${field("Height (cm)", "heightCm", b.heightCm, 100, 230, 1)}
-        ${field("Weight (kg)", "weightKg", b.weightKg, 25, 250, 0.1)}
         <button type="submit" class="week-nav-btn">Save</button>
         <span id="bodyEditStatus" class="chart-note" style="margin:0"></span>
-        <div class="chart-note" style="margin:0; flex-basis:100%">Weight is replaced by the one in Intervals.icu when it has one.</div>
       </form>` : ""}`;
 }
 
 async function saveBody(ownerId, form) {
   const status = document.getElementById("bodyEditStatus");
   const get = name => { const v = form.elements[name].value.trim(); return v === "" ? null : Number(v); };
-  const row = { ownerId, birthYear: get("birthYear"), heightCm: get("heightCm"), weightKg: get("weightKg"), updatedAt: new Date().toISOString() };
+  const row = { ownerId, birthYear: get("birthYear"), heightCm: get("heightCm"), updatedAt: new Date().toISOString() };
   status.textContent = "Saving…";
   try {
     await supaUpsert("runner_body", [row], "ownerId", getSession()?.access_token);
