@@ -115,6 +115,7 @@ const stepRows = []; // { ownerId, date, steps } for every runner-day that has a
 async function fetchWellness(apiKey, athleteId, oldest, newest) {
   const raw = await call(apiKey, `/athlete/${athleteId}/wellness?oldest=${oldest}&newest=${newest}`);
   for (const r of raw) if (Number.isFinite(r.steps) && r.steps > 0) stepRows.push({ ownerId: String(athleteId), date: r.id, steps: Math.round(r.steps) });
+  require("./stats").noteWellness(athleteId, raw); // latest weight / resting HR / VO2max / fitness for the profile page
   return raw
     .filter(r => r.sleepSecs != null || r.sleepScore != null || r.sleepQuality != null || r.avgSleepingHR != null)
     .map(r => ({
@@ -325,6 +326,9 @@ async function fetchAll(cfg) {
       } catch (e) {
         console.error(`${ath.name || ath.id}: sleep fetch failed (${e.message})`);
       }
+
+      try { require("./stats").noteAthlete(ath.id, await call(key, `/athlete/${ath.id}`)); } // weight, max HR, threshold HR/pace
+      catch (e) { console.error(`${ath.name || ath.id}: athlete settings not readable (${e.message})`); }
     } catch (e) {
       console.error(`${ath.name || ath.id}: FAILED (${e.message}) ${e.body || ""}`);
     }
@@ -351,6 +355,9 @@ async function fetchAll(cfg) {
   // Daily step counts for the home page's "Daily steps" graph (supabase/daily_steps.sql). Like records, never allowed to fail the sync.
   try { if (stepRows.length) await require("./steps").saveSteps(stepRows); }
   catch (e) { console.error(`Steps skipped (${e.message}) — has supabase/daily_steps.sql been run?`); }
+  // Profile numbers (supabase/runner_stats.sql). Same rule: never allowed to fail the sync.
+  try { await require("./stats").saveStats(); }
+  catch (e) { console.error(`Profile stats skipped (${e.message}) — has supabase/runner_stats.sql been run?`); }
   if (newRuns.length) await notifyNewRuns(newRuns);
   // Save any new personal records (supabase/records.sql). Never lets a missing table or a hiccup fail the sync.
   try { await require("./records").updateRecords(); }
