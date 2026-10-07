@@ -306,14 +306,18 @@ async function fetchAll(cfg) {
         }
         const freshIds = new Set(mine.map(a => String(a.activityId)));
         const candidateIds = existingIds.filter(id => !freshIds.has(String(id)));
-        const confirmedGoneIds = [];
+        const confirmedGoneIds = [], stillExistsIds = [];
         for (const id of candidateIds) {
           const stillThere = await call(key, `/activity/${id}`).then(() => true).catch(e => e.status !== 404);
-          if (!stillThere) confirmedGoneIds.push(id);
+          (stillThere ? stillExistsIds : confirmedGoneIds).push(id);
         }
         if (confirmedGoneIds.length) {
           await supa.deleteActivities(confirmedGoneIds);
           console.log(`${ath.name || ath.id}: removed ${confirmedGoneIds.length} run(s) confirmed deleted on Intervals.icu`);
+        }
+        if (stillExistsIds.length) {
+          await supa.hideActivities(stillExistsIds);
+          console.log(`${ath.name || ath.id}: hid ${stillExistsIds.length} run(s) missing from the list but not confirmed deleted`);
         }
       } catch (e) {
         console.error(`${ath.name || ath.id}: deleted-run check failed (${e.message})`);
@@ -344,7 +348,7 @@ async function fetchAll(cfg) {
     activityId: String(a.activityId), ownerId: String(a.ownerId), activityName: a.activityName,
     activityType: a.activityType, startTimeInSeconds: a.startTimeInSeconds, distanceInMeters: a.distanceInMeters,
     durationInSeconds: a.durationInSeconds, averageHeartRateInBeatsPerMinute: a.averageHeartRateInBeatsPerMinute,
-    deviceName: a.deviceName, fetchedAt,
+    deviceName: a.deviceName, fetchedAt, hidden: false, // always un-hide anything Intervals.icu currently confirms
   })));
   if (sleep.length) {
     await supa.upsertSleep(sleep.map(s => ({

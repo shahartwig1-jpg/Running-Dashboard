@@ -89,8 +89,19 @@ async function deleteActivities(activityIds) {
   await request("DELETE", "activity_details", { query: `?activityId=in.(${idList})` });
 }
 
+// Soft-hide: for runs missing from Intervals.icu's list but NOT confirmed gone (no 404 on
+// direct lookup) — hides them from the dashboard without destroying the row, since that
+// "missing but still exists" state has been confirmed to also happen to real, non-deleted
+// runs. Rows reappearing in a later fetch get un-hidden automatically by upsertActivities
+// (which always sets hidden: false), not by this function.
+async function hideActivities(activityIds) {
+  if (!activityIds.length) return;
+  const idList = activityIds.map(id => encodeURIComponent(id)).join(",");
+  await request("PATCH", "activities", { query: `?activityId=in.(${idList})`, body: { hidden: true } });
+}
+
 module.exports = {
   upsertRunners, upsertActivities, upsertSleep, upsertPlanDays,
   upsertActivityDetail, getActivityDetail, getPlanHistory,
-  getActivityIds, deleteActivities,
+  getActivityIds, deleteActivities, hideActivities,
 };
