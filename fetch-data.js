@@ -10,6 +10,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { routeFromStreams } = require("./route");
 const supa = require("./supabase");
 
 const BASE = "https://intervals.icu/api/v1";
@@ -18,7 +19,7 @@ const KEY_PATH = path.join(__dirname, "key.txt"); // holds only the key, so ther
 const OUT_PATH = path.join(__dirname, "data.json");
 const DAYS_BACK = 70; // ~10 weeks, enough for the 8-week trend plus slack
 const DETAIL_DIR = path.join(__dirname, "details"); // per-activity laps + streams, one file each
-const STREAM_TYPES = "time,heartrate,distance,altitude,velocity_smooth";
+const STREAM_TYPES = "time,heartrate,distance,altitude,velocity_smooth,latlng";
 const SYNC_SECRET_PATH = path.join(__dirname, "sync-secret.txt"); // never committed — shared with the notify-push Edge Function
 const PUSH_FUNCTION = "rapid-task"; // the deployed notify-push function — Supabase auto-named it; see index.html's PUSH_FUNCTION comment
 
@@ -146,6 +147,8 @@ function normalizeStreams(raw) {
     altitudeInMeters: byType.altitude || [],
     // pace, not raw speed, is what a runner reads — convert here so the dashboard doesn't have to.
     paceSecPerKm: (byType.velocity_smooth || []).map(v => (v > 0.3 ? Math.round(1000 / v) : null)),
+    // GPS route for the map: privacy-trimmed and thinned out (see route.js). [] when the run has no GPS.
+    route: routeFromStreams(raw),
   };
 }
 

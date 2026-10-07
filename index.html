@@ -390,6 +390,10 @@
   .profile-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
   .profile-name { font-size: 18px; font-weight: 700; }
   .profile-edit { margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .route-map { height: 260px; border-radius: 10px; overflow: hidden; isolation: isolate; background: var(--grid); }
+  .route-map .leaflet-control-attribution { font-size: 10px; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .route-map .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9); } }
+  :root[data-theme="dark"] .route-map .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9); }
   .idle-note { font-size: 12px; color: var(--text-muted); margin-top: 10px; }
   .rec-history { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 6px; }
   .rec-history-row { display: flex; align-items: baseline; gap: 12px; font-size: 12px; padding: 4px 6px; border-radius: 6px; cursor: pointer; font-variant-numeric: tabular-nums; }
@@ -1553,6 +1557,11 @@ function renderGroupSessions() {
   if (selectedRunnerId !== null) sessions = sessions.filter(s => s.runnerIds.has(selectedRunnerId));
   if (!sessions.length) { card.style.display = "none"; return; }
   card.style.display = "";
+  // A session from today is the news, so it goes right under the highlight. An older one belongs with
+  // the other history, below the graphs.
+  const todayStr = new Date().toDateString();
+  const anchor = document.getElementById(new Date(sessions[0].start * 1000).toDateString() === todayStr ? "tiles" : "planCard");
+  if (card.nextElementSibling !== anchor) anchor.parentNode.insertBefore(card, anchor);
   const hidden = groupCardHidden();
   document.getElementById("groupToggle").textContent = hidden ? "Show" : "Hide";
   document.getElementById("groupSub").textContent = `${sessions.length} session${sessions.length > 1 ? "s" : ""} detected from runs that started together` +
@@ -1578,13 +1587,14 @@ function renderGroupSessions() {
       <button class="gs-block-title${b.role === "main" ? " main" : ""}" type="button" data-block="${esc(blockKey(b))}" aria-expanded="${bOpen}">
         <span class="gs-caret">${bOpen ? "▾" : "▸"}</span>${esc(blockLabel(b))} · ${fmtKm(b.avgKm)} km · ${b.members.length} runners
       </button>
-      ${bOpen ? groupTableHtml(b.members) + othersHtml(b) : ""}
+      ${bOpen ? groupTableHtml(b.members) + othersHtml(b) + `<button class="week-nav-btn gs-route-btn" type="button" data-route-block="${esc(blockKey(b))}" style="margin-top:8px;">🗺 ${groupRoutesOpen.has(blockKey(b)) ? "Hide route" : "Show route"}</button><div class="route-map" data-route-map="${esc(blockKey(b))}" hidden style="margin-top:8px;"></div>` : ""}
     </div>`;
     }).join("");
     return `<div class="gs-session">${head}<div class="gs-session-body">${blocks}<div class="gs-photos" data-photos-for="${esc(s.id)}"></div></div></div>`;
   }).join("") + (sessions.length > groupShown ? `<button id="groupMore" class="week-nav-btn" type="button" style="margin-top:8px;">Show earlier sessions</button>` : "");
 
   shown.filter(s => groupExpanded.has(s.id)).forEach(loadSessionPhotos);
+  groupRoutesOpen.forEach(showBlockRoute);
 }
 
 // Photos people attached to any run of the session. Needs a login (RLS), so it silently shows nothing otherwise.
@@ -1614,6 +1624,13 @@ document.getElementById("groupBody").addEventListener("click", e => {
   if (head) {
     const id = head.dataset.session;
     groupExpanded.has(id) ? groupExpanded.delete(id) : groupExpanded.add(id);
+    renderGroupSessions();
+    return;
+  }
+  const routeBtn = e.target.closest(".gs-route-btn");
+  if (routeBtn) {
+    const key = routeBtn.dataset.routeBlock;
+    groupRoutesOpen.has(key) ? groupRoutesOpen.delete(key) : groupRoutesOpen.add(key);
     renderGroupSessions();
     return;
   }
@@ -1782,6 +1799,70 @@ document.addEventListener("click", e => {
   e.stopPropagation();
   openProfile(el.dataset.profile);
 }, true);
+
+/* ---------- Route map ----------
+   Routes are saved per run by fetch-data.js / backfill-routes.js (see route.js: start and end are trimmed off
+   for privacy). The map library (Leaflet) is only downloaded the first time someone opens a map, pinned with an
+   integrity hash so a changed file would simply not run. */
+let leafletPromise = null;
+function loadLeaflet() {
+  leafletPromise ??= new Promise((resolve, reject) => {
+    const css = document.createElement("link");
+    css.rel = "stylesheet"; css.crossOrigin = "anonymous";
+    css.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
+    css.integrity = "sha384-c6Rcwz4e4CITMbu/NBmnNS8yN2sC3cUElMEMfP3vqqKFp7GOYaaBBCqmaWBjmkjb";
+    const cssLoaded = new Promise((res, rej) => { css.onload = res; css.onerror = () => rej(new Error("map style failed to load")); });
+    document.head.appendChild(css);
+    const js = document.createElement("script");
+    js.crossOrigin = "anonymous";
+    js.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+    js.integrity = "sha384-NElt3Op+9NBMCYaef5HxeJmU4Xeard/Lku8ek6hoPTvYkQPh3zLIrJP7KiRocsxO";
+    const jsLoaded = new Promise((res, rej) => { js.onload = res; js.onerror = () => rej(new Error("map library failed to load")); });
+    document.head.appendChild(js);
+    // The map is measured when it is created, so both the style and the script must be in first.
+    Promise.all([cssLoaded, jsLoaded]).then(() => resolve(window.L), e => { leafletPromise = null; reject(e); });
+  });
+  return leafletPromise;
+}
+async function drawRouteMap(el, route) {
+  if (!el || el.dataset.drawn) return;
+  el.dataset.drawn = "1";
+  try {
+    const L = await loadLeaflet();
+    const map = L.map(el, { scrollWheelZoom: false });
+    el._routeMap = map;
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap contributors" }).addTo(map);
+    const line = L.polyline(route, { color: "#2a78d6", weight: 4, opacity: 0.95 }).addTo(map);
+    L.circleMarker(route[0], { radius: 6, color: "#fff", weight: 2, fillColor: "#1baf7a", fillOpacity: 1 }).addTo(map);
+    L.circleMarker(route[route.length - 1], { radius: 6, color: "#fff", weight: 2, fillColor: "#e34948", fillOpacity: 1 }).addTo(map);
+    const fit = () => { map.invalidateSize(); map.fitBounds(line.getBounds(), { padding: [24, 24] }); };
+    fit();
+    // Re-fit whenever the map's box changes size (the side panel finishing its layout, a phone being rotated).
+    if (window.ResizeObserver) new ResizeObserver(() => { if (el.clientWidth) fit(); }).observe(el);
+    else setTimeout(fit, 150);
+  } catch {
+    delete el.dataset.drawn;
+    el.innerHTML = "<div class=\"empty-note\">Could not load the map</div>";
+  }
+}
+const routeOf = detail => (detail?.streams?.route?.length > 1 ? detail.streams.route : null);
+const routeSectionHtml = detail => routeOf(detail)
+  ? `<div class="section-title">Route</div><div class="route-map" id="routeMap"></div><div class="chart-note">The first and last 150 m are hidden for privacy · green = start of the shown route, red = end</div>` : "";
+
+// Group blocks: one shared map per block, taken from the first runner (fastest first) whose run has a route.
+const groupRoutesOpen = new Set();
+const findBlockByKey = key => { for (const s of groupSessions()) for (const b of s.blocks) if (blockKey(b) === key) return b; return null; };
+async function showBlockRoute(key) {
+  const b = findBlockByKey(key);
+  const el = document.querySelector(`[data-route-map="${CSS.escape(key)}"]`);
+  if (!b || !el) return;
+  for (const m of b.members) {
+    const route = routeOf(await loadDetail(m.activityId));
+    if (route) { el.hidden = false; drawRouteMap(el, route); return; }
+  }
+  el.hidden = false;
+  el.innerHTML = '<div class="empty-note">No route saved for this block</div>';
+}
 
 /* ---------- per-activity detail panel: laps + streams (real data only) ---------- */
 const detailCache = new Map();
@@ -2031,12 +2112,13 @@ async function openDetail(activityId) {
       <div class="chart-note">X axis: distance (km) · lower pace = faster running</div>`;
   }
 
-  body.innerHTML = recordBannerHtml(activityId) + tilesHtml + groupResultsHtml(activityId) + stickerSectionHtml(a) +
+  body.innerHTML = recordBannerHtml(activityId) + tilesHtml + routeSectionHtml(detail) + groupResultsHtml(activityId) + stickerSectionHtml(a) +
     `<div class="section-title">Laps (${detail.laps?.length || 0})</div>${lapsHtml}` +
     chartsHtml +
     `<div id="engagement"></div>`;
   initSticker(a);
   loadEngagement(activityId);
+  if (routeOf(detail)) drawRouteMap(document.getElementById("routeMap"), routeOf(detail));
 }
 
 async function loadEngagement(activityId) {
