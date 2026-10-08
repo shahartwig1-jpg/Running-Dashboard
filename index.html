@@ -2531,8 +2531,22 @@ async function refreshSession() {
 }
 // Keeps a long-open tab/app working (writes used to fail silently after the first hour).
 setInterval(() => { if (getSession() && sessionExpiresSoon(getSession())) refreshSession().catch(() => { }); }, 60000);
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && getSession() && sessionExpiresSoon(getSession())) refreshSession().catch(() => { });
+// The data is only loaded when the page opens, and a phone keeps the app open in the background for days. So
+// coming back after 10+ minutes away loads everything again (new runs, someone's new photo...). Skipped while a
+// run or profile is open, so nothing jumps under the reader's finger.
+let hiddenSince = null;
+document.addEventListener("visibilitychange", async () => {
+  if (document.hidden) { hiddenSince = Date.now(); return; }
+  const awayMs = hiddenSince ? Date.now() - hiddenSince : 0;
+  hiddenSince = null;
+  let session = getSession();
+  if (!session?.access_token) return;
+  try {
+    if (sessionExpiresSoon(session)) session = await refreshSession();
+    if (awayMs < 10 * 60000 || document.getElementById("overlay").style.display === "block") return;
+    await loadFromSupabase(session.access_token);
+    renderAll();
+  } catch { } // offline or a hiccup: keep showing what's there
 });
 
 async function supabaseSignIn(email, password) {
