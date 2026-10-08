@@ -211,6 +211,7 @@
   .feed-name { font-weight: 600; font-size: 13px; }
   .feed-time { font-size: 11px; color: var(--text-muted); }
   .feed-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .sport-emoji { margin-inline-end: 6px; }
   .sport-tag {
     display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; vertical-align: 1px;
     color: var(--text-secondary); border: 1px solid var(--border); border-radius: 999px; padding: 0 7px; margin-inline-end: 7px;
@@ -809,7 +810,8 @@ function sportMetrics(a) {
   if (sport === "strength" || sport === "other" || !d) return { main: [fmtDur(t), ""], grid: [hr] };
   return { main: [fmtKm(d / 1000), "km"], grid: [time, { label: "PACE", value: fmtPace(t / (d / 1000)), unit: "/km" }, hr] };
 }
-const sportTagHtml = a => sportOf(a) === "run" || (a.activityName || "").trim().toLowerCase() === SPORT_LABEL[sportOf(a)].toLowerCase() ? "" : `<span class="sport-tag">${SPORT_LABEL[sportOf(a)]}</span>`; // no tag when the name already says it
+const SPORT_EMOJI = { ride: "🚴", swim: "🏊" };
+const sportTagHtml = a => SPORT_EMOJI[sportOf(a)] ? `<span class="sport-emoji" title="${SPORT_LABEL[sportOf(a)]}">${SPORT_EMOJI[sportOf(a)]}</span>` : sportOf(a) === "run" || (a.activityName || "").trim().toLowerCase() === SPORT_LABEL[sportOf(a)].toLowerCase() ? "" : `<span class="sport-tag">${SPORT_LABEL[sportOf(a)]}</span>`; // no tag when the name already says it
 
 function matchesRunner(a) {
   return selectedRunnerId === null || a.ownerId === selectedRunnerId;
@@ -1838,7 +1840,7 @@ function openProfile(ownerId) {
 
   const recent = ALL_ACTIVITIES.filter(a => a.ownerId === ownerId && !a.hidden).sort((x, y) => y.startTimeInSeconds - x.startTimeInSeconds).slice(0, 5).map(a => {
     const m = sportMetrics(a), second = m.grid.find(g => g.label !== "TIME" && g.label !== "HEART RATE");
-    return `<div class="rec-history-row" data-open-activity="${esc(a.activityId)}"><span>${recDate(a.startTimeInSeconds)}</span><b>${m.main[0]}${m.main[1] ? " " + m.main[1] : ""}</b><span class="gs-session-meta">${[sportOf(a) === "run" ? "" : SPORT_LABEL[sportOf(a)], m.main[1] ? fmtDur(a.durationInSeconds) : "", second ? `${second.value} ${second.unit}` : ""].filter(Boolean).join(" · ")}</span></div>`;
+    return `<div class="rec-history-row" data-open-activity="${esc(a.activityId)}"><span>${recDate(a.startTimeInSeconds)}</span><b>${m.main[0]}${m.main[1] ? " " + m.main[1] : ""}</b><span class="gs-session-meta">${[sportOf(a) === "run" ? "" : (SPORT_EMOJI[sportOf(a)] ? SPORT_EMOJI[sportOf(a)] + " " : "") + SPORT_LABEL[sportOf(a)], m.main[1] ? fmtDur(a.durationInSeconds) : "", second ? `${second.value} ${second.unit}` : ""].filter(Boolean).join(" · ")}</span></div>`;
   }).join("");
 
   const bodyHtml = bodyFitnessHtml(ownerId);
@@ -2248,7 +2250,7 @@ async function openDetail(activityId) {
   sheet.innerHTML = `
     <div class="sheet-head">
       <div>
-        <h3>${a ? esc(a.activityName) : "Run"}</h3>
+        <h3>${a ? sportTagHtml(a) + esc(a.activityName) : "Run"}</h3>
         <div class="sheet-sub">${r ? esc(r.name) + " · " : ""}${a ? fmtDate(a.startTimeInSeconds) : ""}</div>
       </div>
       <button class="close-btn" id="closeSheet">Close ✕</button>
