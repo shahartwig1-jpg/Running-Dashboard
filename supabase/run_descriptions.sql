@@ -5,14 +5,19 @@
 -- "Time" stays the timer time. Older runs without it fall back to the timer time.
 alter table activities add column if not exists "movingSeconds" integer;
 
--- Part 2: run descriptions. A few words the runner writes about their run, shown on its card in the feed.
+-- Part 2: run descriptions and main photo. A few words the runner writes about their run, and which of its photos
+-- (activity_photos) is shown on its card in the feed (the newest one when none is picked).
 -- Everyone logged in can read them; only the run's owner (or a coach) can write one. The owner is looked up from
 -- the activities table, never taken from what the browser sends.
 create table if not exists run_notes (
   "activityId" text primary key references activities("activityId") on delete cascade,
   text text not null default '' check (char_length(text) <= 1000),
+  "coverPhotoUrl" text,
   "updatedAt" timestamptz not null default now()
 );
+
+-- In case an earlier version of this file was already run without it.
+alter table run_notes add column if not exists "coverPhotoUrl" text;
 
 alter table run_notes enable row level security;
 

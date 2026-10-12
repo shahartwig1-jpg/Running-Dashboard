@@ -215,6 +215,8 @@
     font-size: 13px; color: var(--text-secondary); white-space: pre-wrap; margin: -2px 0 6px;
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
   }
+  .photo-main-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+  .photo-main-btn { margin-top: 6px; }
   .run-note { font-size: 14px; color: var(--text-secondary); white-space: pre-wrap; margin: 0 0 10px; }
   .run-note-btn { margin: 0 0 14px; }
   .run-note-edit { margin: 0 0 14px; }
@@ -685,6 +687,7 @@ let TODAY = new Date(2026, 6, 15, 12, 0, 0); // demo reference date
 let WEEKS = [];
 let ACTIVITIES = [];     // runs only: every running number on the page (weekly km, graphs, records, group sessions) uses this
 let NOTES = {};          // activityId -> the description its runner wrote (run_notes, see supabase/run_descriptions.sql)
+let COVERS = {};         // activityId -> url of the photo its runner picked for the feed card (run_notes.coverPhotoUrl)
 let ALL_ACTIVITIES = []; // runs plus rides, swims and strength sessions: the feed and the detail panel use this
 let SLEEP = [];
 let STEPS = []; // daily_steps rows: { ownerId, date, steps } (empty until supabase/daily_steps.sql is run and a sync has filled it)
@@ -1504,9 +1507,11 @@ async function loadFeedEngagement(activityIds) {
 
   try {
     const photos = await supaGet(`activity_photos?activityId=in.(${idList})&select=activityId,url&order=createdAt.desc`, token);
+    // One photo per card: the one the runner picked (if it still exists), otherwise the newest.
+    const picked = photos.filter(p => COVERS[p.activityId] === p.url);
     const seen = new Set();
-    photos.forEach(p => {
-      if (seen.has(p.activityId)) return; // most recent photo per activity only
+    [...picked, ...photos].forEach(p => {
+      if (seen.has(p.activityId)) return;
       seen.add(p.activityId);
       const img = document.querySelector(`img[data-photo-for="${p.activityId}"]`);
       const wrap = document.querySelector(`[data-photo-wrap-for="${p.activityId}"]`);
@@ -2356,14 +2361,22 @@ async function loadEngagement(activityId) {
   }
   if (!document.getElementById("engagement")) return; // panel closed/changed while this was loading
 
+  // The photo shown on the feed card: the one the run's owner picked, otherwise the newest. It goes first here too.
+  const run = ALL_ACTIVITIES.find(x => String(x.activityId) === String(activityId));
+  const mayPick = !!run && canEditProfile(run.ownerId);
+  const mainUrl = (photos.find(p => p.url === COVERS[activityId]) || photos[0])?.url;
+  photos = [...photos.filter(p => p.url === mainUrl), ...photos.filter(p => p.url !== mainUrl)];
   const iLiked = likes.some(l => l.authorName === me);
   const otherLikers = likes.map(l => l.authorName).filter(n => n !== me);
   const likerNames = (iLiked ? ["You"] : []).concat(otherLikers);
   setHtml(`
     <div class="section-title">Photos</div>
     ${photos.length ? `<div class="photo-gallery">${photos.map(p => `
-      <div class="photo-wrap"><button class="photo-toggle-btn" type="button">Minimize</button><img src="${esc(safeUrl(p.url))}" alt="Photo by ${esc(authorLabel(p.authorName))}"></div>`).join("")}</div>` : ""}
-    <label class="add-photo-btn">📷 Add photo<input type="file" id="photoInput" accept="image/*" style="display:none"></label>
+      <div class="photo-wrap"><button class="photo-toggle-btn" type="button">Minimize</button><img src="${esc(safeUrl(p.url))}" alt="Photo by ${esc(authorLabel(p.authorName))}">
+        ${photos.length > 1 && p.url === mainUrl ? `<div class="photo-main-label">★ Main photo, shown in the feed</div>`
+          : photos.length > 1 && mayPick ? `<button type="button" class="add-photo-btn photo-main-btn" data-main-photo="${esc(p.url)}">☆ Make main photo</button>` : ""}
+      </div>`).join("")}</div>` : ""}
+    <label class="add-photo-btn">📷 Add photos<input type="file" id="photoInput" accept="image/*" multiple style="display:none"></label>
     <div id="photoStatus" style="font-size:11px; color:var(--text-muted); margin-top:4px;"></div>
 
     <div class="section-title" style="margin-top:20px;">Kudos & comments</div>
@@ -2391,17 +2404,34 @@ async function loadEngagement(activityId) {
     </div>`);
 
   document.getElementById("photoInput").addEventListener("change", async e => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = [...e.target.files];
+    if (!files.length) return;
     const status = document.getElementById("photoStatus");
-    status.textContent = "Uploading…";
+    let done = 0;
     try {
-      await uploadPhoto(activityId, file, me, token);
+      for (const file of files) {
+        status.textContent = files.length > 1 ? `Uploading ${done + 1} of ${files.length}…` : "Uploading…";
+        await uploadPhoto(activityId, file, me, token);
+        done++;
+      }
       loadEngagement(activityId);
+      renderFeed(); // the card picks the new photo up
     } catch {
-      status.textContent = "Upload failed — try again.";
+      status.textContent = done ? `${done} of ${files.length} uploaded, the rest failed — try again.` : "Upload failed — try again.";
+      if (done) loadEngagement(activityId);
     }
   });
+  document.querySelectorAll("[data-main-photo]").forEach(btn => btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      await saveRunNotes(run, { coverPhotoUrl: btn.dataset.mainPhoto });
+      loadEngagement(activityId);
+      renderFeed();
+    } catch (e) {
+      btn.disabled = false;
+      document.getElementById("photoStatus").textContent = `Couldn't change the main photo (${e.message}).`;
+    }
+  }));
 
   document.getElementById("likeBtn").addEventListener("click", async () => {
     try {
@@ -2448,14 +2478,18 @@ function renderRunNote(a, editing = false) {
     (mayEdit ? `<button type="button" class="add-photo-btn run-note-btn" id="runNoteEdit">✏️ ${text ? "Edit description" : "Add description"}</button>` : "");
   document.getElementById("runNoteEdit")?.addEventListener("click", () => renderRunNote(a, true));
 }
+// Saves the run's row in run_notes (description + main photo) without losing the part that isn't changing.
+async function saveRunNotes(a, change) {
+  const row = { activityId: a.activityId, text: NOTES[a.activityId] || "", coverPhotoUrl: COVERS[a.activityId] || null, ...change, updatedAt: new Date().toISOString() };
+  await supaUpsert("run_notes", [row], "activityId", getSession()?.access_token);
+  if (row.text) NOTES[a.activityId] = row.text; else delete NOTES[a.activityId];
+  if (row.coverPhotoUrl) COVERS[a.activityId] = row.coverPhotoUrl; else delete COVERS[a.activityId];
+}
 async function saveRunNote(a, text) {
   const status = document.getElementById("runNoteStatus");
-  const token = getSession()?.access_token;
   status.textContent = "Saving…";
   try {
-    if (text) await supaUpsert("run_notes", [{ activityId: a.activityId, text, updatedAt: new Date().toISOString() }], "activityId", token);
-    else await supaDelete(`run_notes?activityId=eq.${encodeURIComponent(a.activityId)}`, token);
-    if (text) NOTES[a.activityId] = text; else delete NOTES[a.activityId];
+    await saveRunNotes(a, { text });
     renderRunNote(a);
     renderFeed();
   } catch (e) {
@@ -2909,7 +2943,7 @@ async function loadFromSupabase(accessToken) {
     supaGet(`daily_steps?select=ownerId,date,steps&date=gte.${cutoffDate}&limit=1000`, accessToken).catch(() => []), // daily_steps.sql not run yet -> empty graph, nothing breaks
     supaGet(`runner_fitness?select=*`, accessToken).catch(() => []), // runner_stats.sql not run yet -> no fitness rows, nothing breaks
     supaGet(`runner_body?select=*`, accessToken).catch(() => []), // only your own row (or all, for a coach) comes back
-    supaGet(`run_notes?select=activityId,text&updatedAt=gte.${cutoffDate}`, accessToken).catch(() => []), // run_descriptions.sql not run yet -> no descriptions
+    supaGet(`run_notes?select=activityId,text,coverPhotoUrl&updatedAt=gte.${cutoffDate}`, accessToken).catch(() => []), // run_descriptions.sql not run yet -> no descriptions
   ]);
 
   RUNNERS = runnersRaw.map((r, i) => ({ ...r, slot: (i % 12) + 1 }));
@@ -2920,6 +2954,7 @@ async function loadFromSupabase(accessToken) {
   PROFILES = Object.fromEntries(profilesRaw.map(p => [p.ownerId, p]));
   FITNESS = Object.fromEntries((Array.isArray(fitnessRaw) ? fitnessRaw : []).map(p => [p.ownerId, p]));
   NOTES = Object.fromEntries((Array.isArray(notesRaw) ? notesRaw : []).filter(n => n.text).map(n => [n.activityId, n.text]));
+  COVERS = Object.fromEntries((Array.isArray(notesRaw) ? notesRaw : []).filter(n => n.coverPhotoUrl).map(n => [n.activityId, n.coverPhotoUrl]));
   BODY = Object.fromEntries((Array.isArray(bodyRaw) ? bodyRaw : []).map(p => [p.ownerId, p]));
   MY_RUNNER_ID = typeof myRunnerId === "string" ? myRunnerId : null;
   // Only overwrite the hardcoded fallback once roles.sql has actually been run and seeded —

@@ -51,3 +51,21 @@ test("normalize: sport field is used when type is absent", () => {
   const a = normalize({ id: "i6", start_date: "2026-08-01T06:00:00", sport: "Trail Run" }, "u1");
   assert.equal(a.activityType, "Trail Run");
 });
+
+// Pace must come from the time spent moving, not the watch's timer time (which includes standing at lights):
+// the 2026-10-12 25 km run showed 4:19 on the dashboard while Garmin said 4:15. "Time" stays the timer time.
+test("normalize: keeps moving time apart from timer time, so pace is moving pace", () => {
+  const a = normalize({
+    id: "i196326107", type: "Run", start_date_local: "2026-10-12T09:32:22",
+    distance: 24997, icu_recording_time: 6462, moving_time: 6384,
+  }, "u1");
+  assert.equal(a.durationInSeconds, 6462); // shown as "Time"
+  assert.equal(a.movingSeconds, 6384);     // every pace is worked out from this
+  const pace = a.movingSeconds / (a.distanceInMeters / 1000);
+  assert.equal(`${Math.floor(pace / 60)}:${String(Math.round(pace % 60)).padStart(2, "0")}`, "4:15");
+});
+
+test("normalize: no moving time from Intervals leaves movingSeconds empty (the page then falls back to timer time)", () => {
+  const a = normalize({ id: "i9", type: "Run", start_date_local: "2026-10-12T09:32:22", distance: 5000, elapsed_time: 1600 }, "u1");
+  assert.equal(a.movingSeconds, null);
+});
