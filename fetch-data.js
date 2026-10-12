@@ -92,6 +92,9 @@ function normalize(a, athleteId) {
   const distance = pick(a, "distance", "icu_distance");
   // The watch's timer time (what Garmin shows as "Time"), not moving_time, which drops stopped moments.
   const moving = pick(a, "icu_recording_time", "moving_time", "icu_moving_time", "elapsed_time");
+  // Time actually spent moving (no standing at lights): what Garmin's "Avg Moving Pace" and Strava's pace use.
+  // The dashboard works out every pace from this; "Time" stays the timer time above.
+  const movingOnly = pick(a, "moving_time", "icu_moving_time");
   return {
     activityId: a.id,
     ownerId: athleteId,
@@ -100,6 +103,7 @@ function normalize(a, athleteId) {
     startTimeInSeconds: Math.floor(new Date(pick(a, "start_date_local", "start_date")).getTime() / 1000),
     distanceInMeters: distance != null ? Math.round(distance) : null,
     durationInSeconds: moving != null ? Math.round(moving) : null,
+    movingSeconds: movingOnly != null ? Math.round(movingOnly) : null,
     averageHeartRateInBeatsPerMinute: pick(a, "average_heartrate", "icu_average_heartrate"),
     deviceName: pick(a, "device_name", "deviceName") || "",
   };
@@ -354,6 +358,7 @@ async function fetchAll(cfg) {
     activityType: a.activityType, startTimeInSeconds: a.startTimeInSeconds, distanceInMeters: a.distanceInMeters,
     durationInSeconds: a.durationInSeconds, averageHeartRateInBeatsPerMinute: a.averageHeartRateInBeatsPerMinute,
     deviceName: a.deviceName, fetchedAt, hidden: false, // always un-hide anything Intervals.icu currently confirms
+    movingSeconds: a.movingSeconds,
   })));
   if (sleep.length) {
     await supa.upsertSleep(sleep.map(s => ({

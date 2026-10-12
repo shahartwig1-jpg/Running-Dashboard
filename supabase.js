@@ -49,7 +49,16 @@ async function upsert(table, rows, onConflict) {
 }
 
 async function upsertRunners(rows) { return upsert("runners", rows, "id"); }
-async function upsertActivities(rows) { return upsert("activities", rows, "activityId"); }
+async function upsertActivities(rows) {
+  try {
+    return await upsert("activities", rows, "activityId");
+  } catch (e) {
+    // supabase/run_descriptions.sql (adds the movingSeconds column) not run yet: save everything else, as before.
+    if (!/movingSeconds/.test(e.body || "")) throw e;
+    console.error("activities.movingSeconds column missing — run supabase/run_descriptions.sql. Saving without it.");
+    return upsert("activities", rows.map(({ movingSeconds, ...rest }) => rest), "activityId");
+  }
+}
 async function upsertSleep(rows) { return upsert("sleep", rows, "ownerId,date"); }
 async function upsertPlanDays(rows) { return upsert("plan_history", rows, "ownerId,weekStart,weekday"); }
 

@@ -211,6 +211,15 @@
   .feed-name { font-weight: 600; font-size: 13px; }
   .feed-time { font-size: 11px; color: var(--text-muted); }
   .feed-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .feed-note {
+    font-size: 13px; color: var(--text-secondary); white-space: pre-wrap; margin: -2px 0 6px;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .run-note { font-size: 14px; color: var(--text-secondary); white-space: pre-wrap; margin: 0 0 10px; }
+  .run-note-btn { margin: 0 0 14px; }
+  .run-note-edit { margin: 0 0 14px; }
+  .run-note-edit textarea { width: 100%; box-sizing: border-box; }
+  .run-note-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
   .sport-emoji { margin-inline-end: 6px; }
   .sport-tag {
     display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; vertical-align: 1px;
@@ -675,6 +684,7 @@ let RUNNERS = DEMO_RUNNERS;
 let TODAY = new Date(2026, 6, 15, 12, 0, 0); // demo reference date
 let WEEKS = [];
 let ACTIVITIES = [];     // runs only: every running number on the page (weekly km, graphs, records, group sessions) uses this
+let NOTES = {};          // activityId -> the description its runner wrote (run_notes, see supabase/run_descriptions.sql)
 let ALL_ACTIVITIES = []; // runs plus rides, swims and strength sessions: the feed and the detail panel use this
 let SLEEP = [];
 let STEPS = []; // daily_steps rows: { ownerId, date, steps } (empty until supabase/daily_steps.sql is run and a sync has filled it)
@@ -795,6 +805,9 @@ function sportOf(a) {
   const t = a.activityType || "Run";
   return /run/i.test(t) ? "run" : /ride|cycl|bike/i.test(t) ? "ride" : /swim/i.test(t) ? "swim" : /weight|strength/i.test(t) ? "strength" : "other";
 }
+// Seconds actually spent moving (saved by the sync since run_descriptions.sql); every pace and speed uses it, so a
+// stop at the lights doesn't slow the pace down. Older runs without it fall back to the timer time.
+const movingSec = a => (a.movingSeconds > 0 ? a.movingSeconds : a.durationInSeconds);
 const SPORT_LABEL = { run: "Run", ride: "Ride", swim: "Swim", strength: "Strength", other: "Workout" };
 function setActivities(list) {
   ALL_ACTIVITIES = list.filter(a => !a.hidden); // runs the sync could not confirm still exist (hidden column) count nowhere
@@ -802,13 +815,13 @@ function setActivities(list) {
 }
 // The numbers that make sense for each sport: pace per km for runs, speed for rides, pace per 100 m for swims.
 function sportMetrics(a) {
-  const sport = sportOf(a), d = a.distanceInMeters || 0, t = a.durationInSeconds || 0;
+  const sport = sportOf(a), d = a.distanceInMeters || 0, t = a.durationInSeconds || 0, mt = movingSec(a) || 0;
   const hr = { label: "HEART RATE", value: a.averageHeartRateInBeatsPerMinute ?? "-", unit: "bpm" };
   const time = { label: "TIME", value: fmtDur(t) };
-  if (sport === "ride") return { main: d ? [fmtKm(d / 1000), "km"] : [fmtDur(t), ""], grid: [time, { label: "SPEED", value: d && t ? (d / 1000 / (t / 3600)).toFixed(1) : "-", unit: "km/h" }, hr] };
-  if (sport === "swim") return { main: [Math.round(d).toLocaleString("en-US"), "m"], grid: [time, { label: "PACE", value: d && t ? fmtPace(t / (d / 100)) : "-", unit: "/100m" }, hr] };
+  if (sport === "ride") return { main: d ? [fmtKm(d / 1000), "km"] : [fmtDur(t), ""], grid: [time, { label: "SPEED", value: d && mt ? (d / 1000 / (mt / 3600)).toFixed(1) : "-", unit: "km/h" }, hr] };
+  if (sport === "swim") return { main: [Math.round(d).toLocaleString("en-US"), "m"], grid: [time, { label: "PACE", value: d && mt ? fmtPace(mt / (d / 100)) : "-", unit: "/100m" }, hr] };
   if (sport === "strength" || sport === "other" || !d) return { main: [fmtDur(t), ""], grid: [hr] };
-  return { main: [fmtKm(d / 1000), "km"], grid: [time, { label: "PACE", value: fmtPace(t / (d / 1000)), unit: "/km" }, hr] };
+  return { main: [fmtKm(d / 1000), "km"], grid: [time, { label: "PACE", value: fmtPace(mt / (d / 1000)), unit: "/km" }, hr] };
 }
 const SPORT_EMOJI = { ride: "🚴", swim: "🏊" };
 const sportTagHtml = a => SPORT_EMOJI[sportOf(a)] ? `<span class="sport-emoji" title="${SPORT_LABEL[sportOf(a)]}">${SPORT_EMOJI[sportOf(a)]}</span>` : sportOf(a) === "run" || (a.activityName || "").trim().toLowerCase() === SPORT_LABEL[sportOf(a)].toLowerCase() ? "" : `<span class="sport-tag">${SPORT_LABEL[sportOf(a)]}</span>`; // no tag when the name already says it
@@ -1058,7 +1071,7 @@ function renderTiles() {
   const acts = thisWeekActs(); // every tile follows the viewed week
   const totalSec = acts.reduce((s, a) => s + a.durationInSeconds, 0);
   const totalKmForPace = acts.reduce((s, a) => s + km(a), 0);
-  const avgPace = totalKmForPace ? totalSec / totalKmForPace : 0;
+  const avgPace = totalKmForPace ? acts.reduce((s, a) => s + movingSec(a), 0) / totalKmForPace : 0;
   const hrW = acts.reduce((s, a) => s + (a.averageHeartRateInBeatsPerMinute || 0) * a.durationInSeconds, 0);
   const weeklyKm = thisWeekActs().reduce((s, a) => s + km(a), 0);
   document.getElementById("tiles").innerHTML = `
@@ -1085,7 +1098,7 @@ function renderBars() {
   const per = RUNNERS.map(r => {
     const list = acts.filter(a => a.ownerId === r.id);
     const d = list.reduce((s, a) => s + km(a), 0);
-    const t = list.reduce((s, a) => s + a.durationInSeconds, 0);
+    const t = list.reduce((s, a) => s + movingSec(a), 0);
     return { r, kmSum: d, n: list.length, pace: d ? t / d : 0 };
   }).sort((a, b) => b.kmSum - a.kmSum);
   const max = Math.max(...per.map(p => p.kmSum), 1);
@@ -1384,6 +1397,7 @@ function renderFeed() {
           <span class="feed-time">${fmtDate(a.startTimeInSeconds)}</span>
         </div>
         <div class="feed-title">${sportTagHtml(a)}${esc(a.activityName) || SPORT_LABEL[sportOf(a)]}${recordBadgeHtml(a.activityId)}</div>
+        ${NOTES[a.activityId] ? `<div class="feed-note">${esc(NOTES[a.activityId])}</div>` : ""}
         <div class="feed-body">
           <div class="route-map feed-map" data-feed-map="${esc(a.activityId)}" hidden></div>
           <div class="feed-metrics">
@@ -1555,7 +1569,7 @@ function confirmSameRoute(members) {
 }
 
 let groupCache = { src: null, len: -1, sessions: [] };
-const paceOf = a => a.durationInSeconds / km(a);
+const paceOf = a => movingSec(a) / km(a);
 
 function groupSessions() {
   if (groupCache.src === ACTIVITIES && groupCache.len === ACTIVITIES.length) return groupCache.sessions;
@@ -1804,7 +1818,7 @@ function openProfile(ownerId) {
   const mine = ACTIVITIES.filter(a => a.ownerId === ownerId && !a.hidden && a.distanceInMeters > 0 && a.durationInSeconds > 0)
     .sort((x, y) => y.startTimeInSeconds - x.startTimeInSeconds);
   const totalKm = mine.reduce((t, a) => t + km(a), 0);
-  const totalSec = mine.reduce((t, a) => t + a.durationInSeconds, 0);
+  const totalSec = mine.reduce((t, a) => t + movingSec(a), 0); // for the average pace
   const longest = mine.reduce((best, a) => (!best || a.distanceInMeters > best.distanceInMeters) ? a : best, null);
   const fast5 = mine.filter(a => km(a) >= 5).reduce((best, a) => (!best || paceOf(a) < paceOf(best)) ? a : best, null);
 
@@ -2170,7 +2184,7 @@ async function renderSticker(a) {
 
   const stats = [
     { value: km(a).toFixed(2), unit: "km", label: "DISTANCE" },
-    { value: fmtPace(a.durationInSeconds / km(a)), unit: "/km", label: "PACE" },
+    { value: fmtPace(paceOf(a)), unit: "/km", label: "PACE" },
     { value: fmtDur(a.durationInSeconds), unit: "", label: "TIME" },
   ];
   const unitText = st => !st.unit ? "" : (st.unit.startsWith("/") ? st.unit : " " + st.unit);
@@ -2255,9 +2269,11 @@ async function openDetail(activityId) {
       </div>
       <button class="close-btn" id="closeSheet">Close ✕</button>
     </div>
+    <div id="runNote"></div>
     <div id="sheetBody"><div class="empty-note">Loading details…</div></div>`;
   document.getElementById("overlay").style.display = "block";
   document.getElementById("closeSheet").addEventListener("click", closeDetail);
+  if (a) renderRunNote(a);
 
   const detail = await loadDetail(activityId);
   const body = document.getElementById("sheetBody");
@@ -2406,6 +2422,46 @@ async function loadEngagement(activityId) {
   };
   document.getElementById("commentBtn").addEventListener("click", postComment);
   commentInput.addEventListener("keydown", e => { if (e.key === "Enter") postComment(); });
+}
+
+/* Run description: shown to everyone; the run's owner (or a coach) can write or change it. The database checks
+   who owns the run itself (run_notes policies), the button here is only a convenience. */
+function renderRunNote(a, editing = false) {
+  const el = document.getElementById("runNote");
+  if (!el) return;
+  const text = NOTES[a.activityId] || "", mayEdit = canEditProfile(a.ownerId);
+  if (editing) {
+    el.innerHTML = `<div class="run-note-edit">
+      <textarea id="runNoteText" class="plan-edit-input" rows="3" maxlength="1000" placeholder="How did it go?">${esc(text)}</textarea>
+      <div class="run-note-actions">
+        <button type="button" class="week-nav-btn" id="runNoteSave">Save</button>
+        <button type="button" class="week-nav-btn" id="runNoteCancel">Cancel</button>
+        <span id="runNoteStatus" class="chart-note" style="margin:0"></span>
+      </div></div>`;
+    const box = document.getElementById("runNoteText");
+    box.focus();
+    document.getElementById("runNoteCancel").addEventListener("click", () => renderRunNote(a));
+    document.getElementById("runNoteSave").addEventListener("click", () => saveRunNote(a, box.value.trim()));
+    return;
+  }
+  el.innerHTML = (text ? `<div class="run-note">${esc(text)}</div>` : "") +
+    (mayEdit ? `<button type="button" class="add-photo-btn run-note-btn" id="runNoteEdit">✏️ ${text ? "Edit description" : "Add description"}</button>` : "");
+  document.getElementById("runNoteEdit")?.addEventListener("click", () => renderRunNote(a, true));
+}
+async function saveRunNote(a, text) {
+  const status = document.getElementById("runNoteStatus");
+  const token = getSession()?.access_token;
+  status.textContent = "Saving…";
+  try {
+    if (text) await supaUpsert("run_notes", [{ activityId: a.activityId, text, updatedAt: new Date().toISOString() }], "activityId", token);
+    else await supaDelete(`run_notes?activityId=eq.${encodeURIComponent(a.activityId)}`, token);
+    if (text) NOTES[a.activityId] = text; else delete NOTES[a.activityId];
+    renderRunNote(a);
+    renderFeed();
+  } catch (e) {
+    console.error("saving the run description failed", e);
+    status.textContent = `Couldn't save (${e.message}).`;
+  }
 }
 
 function closeDetail() { document.getElementById("overlay").style.display = "none"; }
@@ -2835,7 +2891,7 @@ async function loadFromSupabase(accessToken) {
   const cutoffSec = Math.floor(Date.now() / 1000) - 90 * 86400;
   const cutoffDate = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
 
-  const [runnersRaw, activitiesRaw, sleepRaw, planRaw, highlightsRaw, racesRaw, rolesRaw, recordsRaw, profilesRaw, myRunnerId, sigsRaw, authorsRaw, stepsRaw, fitnessRaw, bodyRaw] = await Promise.all([
+  const [runnersRaw, activitiesRaw, sleepRaw, planRaw, highlightsRaw, racesRaw, rolesRaw, recordsRaw, profilesRaw, myRunnerId, sigsRaw, authorsRaw, stepsRaw, fitnessRaw, bodyRaw, notesRaw] = await Promise.all([
     supaGet(`runners?select=id,name,device&order=id`, accessToken),
     supaGet(`activities?select=*&startTimeInSeconds=gte.${cutoffSec}&order=startTimeInSeconds.desc`, accessToken),
     supaGet(`sleep?select=*&date=gte.${cutoffDate}`, accessToken),
@@ -2853,6 +2909,7 @@ async function loadFromSupabase(accessToken) {
     supaGet(`daily_steps?select=ownerId,date,steps&date=gte.${cutoffDate}&limit=1000`, accessToken).catch(() => []), // daily_steps.sql not run yet -> empty graph, nothing breaks
     supaGet(`runner_fitness?select=*`, accessToken).catch(() => []), // runner_stats.sql not run yet -> no fitness rows, nothing breaks
     supaGet(`runner_body?select=*`, accessToken).catch(() => []), // only your own row (or all, for a coach) comes back
+    supaGet(`run_notes?select=activityId,text&updatedAt=gte.${cutoffDate}`, accessToken).catch(() => []), // run_descriptions.sql not run yet -> no descriptions
   ]);
 
   RUNNERS = runnersRaw.map((r, i) => ({ ...r, slot: (i % 12) + 1 }));
@@ -2862,6 +2919,7 @@ async function loadFromSupabase(accessToken) {
   groupCache = { src: null, len: -1, sessions: [] }; // fingerprints arrived: detection must run again
   PROFILES = Object.fromEntries(profilesRaw.map(p => [p.ownerId, p]));
   FITNESS = Object.fromEntries((Array.isArray(fitnessRaw) ? fitnessRaw : []).map(p => [p.ownerId, p]));
+  NOTES = Object.fromEntries((Array.isArray(notesRaw) ? notesRaw : []).filter(n => n.text).map(n => [n.activityId, n.text]));
   BODY = Object.fromEntries((Array.isArray(bodyRaw) ? bodyRaw : []).map(p => [p.ownerId, p]));
   MY_RUNNER_ID = typeof myRunnerId === "string" ? myRunnerId : null;
   // Only overwrite the hardcoded fallback once roles.sql has actually been run and seeded —
