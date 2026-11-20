@@ -1141,8 +1141,7 @@ function renderBars() {
   const per = RUNNERS.map(r => {
     const list = acts.filter(a => a.ownerId === r.id);
     const d = list.reduce((s, a) => s + km(a), 0);
-    const t = list.reduce((s, a) => s + movingSec(a), 0);
-    return { r, kmSum: d, n: list.length, pace: d ? t / d : 0 };
+    return { r, kmSum: d, n: list.length };
   }).sort((a, b) => b.kmSum - a.kmSum);
   const max = Math.max(...per.map(p => p.kmSum), 1);
   const { start: wStart, end: wEnd } = weekBounds();
@@ -1162,14 +1161,13 @@ function renderBars() {
     row.addEventListener("mousemove", e => showTip(
       `<div class="t-title">${esc(p.r.name)}</div>
        <div class="t-row">Runs<b>${p.n}</b></div>
-       <div class="t-row">Distance<b>${fmtKm(p.kmSum)} km</b></div>
-       <div class="t-row">Avg pace<b>${fmtPace(p.pace)} min/km</b></div>`, e.clientX, e.clientY));
+       <div class="t-row">Distance<b>${fmtKm(p.kmSum)} km</b></div>`, e.clientX, e.clientY));
     row.addEventListener("mouseleave", hideTip);
   });
 }
 
 function fmtHoursMin(hours) {
-  const h = Math.floor(hours), m = Math.round((hours - h) * 60);
+  const total = Math.round(hours * 60), h = Math.floor(total / 60), m = total % 60;
   return `${h}:${String(m).padStart(2, "0")} hours`;
 }
 
@@ -1188,7 +1186,13 @@ function openPlans(opener) {
   renderPlan();
 }
 
+// Bumped on every render of the Plans panel. A save that finishes after the coach switched runner/week, closed the
+// panel or opened another one must not redraw anything: it compares the number it started with.
+let plansRenderId = 0;
+const plansViewIs = id => id === plansRenderId && document.getElementById("overlay").style.display === "block" && !!document.getElementById("plansWho");
+
 function renderPlan() {
+  const renderId = ++plansRenderId;
   const sheet = document.getElementById("sheet");
   const pw = planWeek(plansWeekOffset);
   const range = `${fmtDateEn(pw.start)} – ${fmtDateEn(pw.end)}` + (plansWeekOffset === 0 ? " (this week)" : "");
@@ -1217,7 +1221,7 @@ function renderPlan() {
   document.getElementById("planEditBtn")?.addEventListener("click", keep("planEditBtn", () => { plansEditing = !plansEditing; }));
 
   const el = document.getElementById("planChart");
-  if (shared) { renderSharedWorkoutTool(el, pw); return; }
+  if (shared) { renderSharedWorkoutTool(el, pw, renderId); return; }
 
   const ownerId = plansRunnerId;
   const weekStartStr = pw.key;
@@ -1235,16 +1239,21 @@ function renderPlan() {
         <button id="planSaveBtn" class="week-nav-btn" type="button">Save</button>
         <span id="planSaveStatus" style="font-size:12px; color:var(--text-muted);"></span>
       </div>`;
-    document.getElementById("planSaveBtn").addEventListener("click", async () => {
+    const saveBtn = document.getElementById("planSaveBtn");
+    saveBtn.addEventListener("click", async () => {
       const status = document.getElementById("planSaveStatus");
       const texts = [...el.querySelectorAll(".plan-edit-input")].map(inp => inp.value.trim());
+      saveBtn.disabled = true; // no double submit while the first one is on its way
       status.textContent = "Saving…";
       try {
-        await savePlanWeek(ownerId, weekStartStr, texts);
+        await savePlanWeek(ownerId, weekStartStr, texts); // updates PLAN_HISTORY whatever the panel shows now
+        if (!plansViewIs(renderId)) return; // the coach moved on: leave whatever is on screen alone
         plansEditing = false;
         renderPlan();
         document.getElementById("planEditBtn")?.focus();
       } catch {
+        if (!plansViewIs(renderId)) return;
+        saveBtn.disabled = false;
         status.textContent = "Save failed — try again";
       }
     });
@@ -1278,7 +1287,7 @@ async function savePlanWeek(ownerId, weekStartStr, texts) {
 
 // One workout, applied to several runners' plans at once — e.g. a shared group session
 // everyone's doing the same day, instead of retyping it into each runner's week one by one.
-function renderSharedWorkoutTool(el, pw) {
+function renderSharedWorkoutTool(el, pw, renderId) {
   const weekStartStr = pw.key;
   const dayDates = [...Array(7).keys()].map(i => pw.day(i));
   const tomorrow = PD.addDays(PD.israelYMD(TODAY), 1);
@@ -1302,19 +1311,25 @@ function renderSharedWorkoutTool(el, pw) {
       <span id="sharedWorkoutStatus" style="font-size:12px; color:var(--text-muted);"></span>
     </div>`;
 
-  document.getElementById("sharedWorkoutApply").addEventListener("click", async () => {
+  const applyBtn = document.getElementById("sharedWorkoutApply");
+  applyBtn.addEventListener("click", async () => {
     const status = document.getElementById("sharedWorkoutStatus");
     const weekday = +document.getElementById("sharedWorkoutDay").value;
     const text = document.getElementById("sharedWorkoutText").value.trim();
     const ownerIds = [...el.querySelectorAll(".shared-runner-check:checked")].map(c => c.value);
     if (!text) { status.textContent = "Type a workout first"; return; }
     if (!ownerIds.length) { status.textContent = "Pick at least one runner"; return; }
+    applyBtn.disabled = true; // no double submit while the first one is on its way
     status.textContent = "Saving…";
     try {
       await saveSharedWorkout(weekStartStr, weekday, text, ownerIds);
+      if (!plansViewIs(renderId)) return; // panel changed or closed meanwhile: don't write into it
       status.textContent = `Saved for ${ownerIds.length} runner${ownerIds.length > 1 ? "s" : ""}`;
     } catch {
+      if (!plansViewIs(renderId)) return;
       status.textContent = "Save failed — try again";
+    } finally {
+      if (plansViewIs(renderId)) applyBtn.disabled = false;
     }
   });
 }
