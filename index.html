@@ -92,18 +92,18 @@
      crouching in front are lower in the frame than the standing row, so this needs to
      be tall enough to reach them; tune the 54% if the framing needs to shift. */
   .hero { position: relative; height: 360px; border-radius: 14px; overflow: hidden; margin-bottom: 20px;
-    /* team.jpg itself stays gitignored (real faces, repo is public) — this points at a
-       public-read Supabase Storage copy instead, so the image reaches the deployed site
-       without the file ever being committed. */
-    background: url("https://vyvfrnkxvsjinzflrnig.supabase.co/storage/v1/object/public/site-assets/team.jpg") center 54% / cover no-repeat; }
+    /* The photo stays gitignored (real faces, repo is public): it lives in public-read Supabase Storage
+       (site-assets/team-2026.jpg, 1450x1200, cropped around the faces) and only its link is committed.
+       The y-positions keep every face in frame at each header height. */
+    background: url("https://vyvfrnkxvsjinzflrnig.supabase.co/storage/v1/object/public/site-assets/team-2026.jpg") center 15% / cover no-repeat; }
   .hero::after {
     content: "";
     position: absolute; inset: 0; z-index: 2;
     background: linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.32) 48%, rgba(0,0,0,0.05) 100%);
   }
   .hero-content { position: relative; z-index: 3; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; padding: 16px 20px; }
-  @media (max-width: 860px) { .hero { height: 220px; } }
-  @media (max-width: 600px) { .hero { height: 230px; background-position: center 30%; } .hero h1 { font-size: 18px; white-space: nowrap; } header { gap: 6px 10px; } }
+  @media (max-width: 860px) { .hero { height: 220px; background-position: center 22%; } }
+  @media (max-width: 600px) { .hero { height: 230px; background-position: center 12%; } .hero h1 { font-size: 18px; white-space: nowrap; } header { gap: 6px 10px; } }
 
   header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px; margin-bottom: 4px; }
   h1 { font-size: 22px; font-weight: 700; }
