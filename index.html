@@ -325,6 +325,19 @@
   }
   #overlay .close-btn:hover { border-color: var(--baseline); }
   #overlay .mini-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+  #overlay .mini-tiles.three { grid-template-columns: repeat(3, 1fr); }
+  .profile-week { margin: 14px 0 6px; }
+  .pw-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .pw-nav .week-nav-btn { min-width: 40px; min-height: 36px; font-size: 16px; }
+  .pw-range { font-size: 13px; color: var(--text-secondary); text-align: center; }
+  .pw-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pw-stat { background: var(--page); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+  .pw-stat .label { font-size: 11px; color: var(--text-muted); }
+  .pw-stat .value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .pw-stat .value .unit { font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-inline-start: 4px; }
+  .pw-stat .value.pw-none { font-size: 15px; font-weight: 600; color: var(--text-muted); padding: 4px 0; }
+  .pw-note { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .pw-fresh { margin-top: 8px; }
   #overlay .mini-tile { background: var(--page); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
   #overlay .mini-tile .label { font-size: 11px; color: var(--text-muted); }
   #overlay .mini-tile .value { font-size: 16px; font-weight: 700; }
@@ -1843,13 +1856,127 @@ document.getElementById("plansBtn").addEventListener("click", e => openPlans(e.c
 
 const rankWord = n => { const v = n % 100, suf = ["th", "st", "nd", "rd"]; return n + (suf[(v - 20) % 10] || suf[v] || suf[0]); };
 
+/* ---------- Profile week: distance + sleep side by side, five-week trend, seven-day steps ---------- */
+// One week (Israel time, Sunday to Saturday) chosen inside the profile drives all four. It is independent of the
+// home page's week navigator. Missing data is never shown as 0: a week's distance only counts once a sync has read
+// the runner after it, sleep averages only recorded nights, and a day with no step row is "no data" (the sync only
+// saves counts above zero, so a measured zero can't happen).
+let profileOwner = null, profileWeekOffset = 0;
+const profileSel = { trend: 4, steps: null };
+const PROFILE_DAYS = 88; // a little inside the 90 days loadFromSupabase() fetches, so every week shown is fully loaded
+
+function profileWeekData(ownerId) {
+  const today = PD.israelYMD(TODAY), cur = PD.sundayOf(today);
+  const sunday = PD.addDays(cur, profileWeekOffset * 7);
+  const checked = RUNNER_CHECKED[ownerId], checkedDay = checked > 0 ? PD.israelYMD(checked) : null;
+  const oldest = PD.addDays(today, -PROFILE_DAYS); // weeks starting before this aren't (fully) loaded on the page
+  const runsIn = (from, to) => ACTIVITIES.filter(a => a.ownerId === ownerId && a.distanceInMeters > 0)
+    .filter(a => { const d = PD.activityYMD(a.startTimeInSeconds); return d >= from && d < to; });
+  const week = sun => {
+    const current = sun === cur, runs = runsIn(sun, PD.addDays(sun, 7));
+    const loaded = sun >= oldest;
+    return { sunday: sun, current, loaded, runs: runs.length, km: runs.reduce((t, a) => t + km(a), 0),
+      known: loaded && !!checkedDay && checkedDay >= (current ? sun : PD.addDays(sun, 7)) };
+  };
+  const nightsTotal = sunday === cur ? PD.weekdayOf(today) + 1 : 7; // this week: nights up to this morning
+  const nights = SLEEP.filter(x => x.ownerId === ownerId && x.sleepSecs != null && x.date >= sunday && x.date <= PD.addDays(sunday, 6));
+  const steps = [...Array(7).keys()].map(i => {
+    const date = PD.addDays(sunday, i), row = STEPS.find(x => x.ownerId === ownerId && x.date === date);
+    return { date, i, steps: row ? row.steps : null, future: date > today, today: date === today };
+  });
+  return {
+    today, cur, sunday, current: sunday === cur, checked,
+    canPrev: PD.addDays(sunday, -7) >= oldest, canNext: sunday < cur,
+    week: week(sunday), trend: [-4, -3, -2, -1, 0].map(i => week(PD.addDays(sunday, i * 7))),
+    sleep: { n: nights.length, of: nightsTotal, hours: nights.length ? nights.reduce((t, x) => t + x.sleepSecs, 0) / nights.length / 3600 : null },
+    steps,
+  };
+}
+
+// Five or seven bars on one scale from 0. items: { label, value, state: "ok" | "na" | "future", partial, say }.
+function miBarsHtml(chart, items, sel, top) {
+  return `<div class="mi-chart" data-chart="${chart}"><div class="mi-scale" aria-hidden="true"><span>${esc(top.label)}</span></div>` + items.map((it, i) =>
+    `<button type="button" class="mi-bar${it.partial ? " current" : ""}${it.state === "ok" ? "" : " na"}" data-chart="${chart}" data-mi="${i}" aria-pressed="${i === sel}" aria-label="${esc(it.say)}">
+      <span class="mi-track">${it.state === "ok" ? `<span class="mi-fill" style="height:${(it.value / top.value * 100).toFixed(1)}%"></span>` : it.state === "future" ? "" : "–"}</span>
+      <span class="mi-lab">${esc(it.label)}</span></button>`).join("") + `</div><div class="mi-readout" aria-live="polite">${esc(items[sel].say)}</div>`;
+}
+
+function profileWeekHtml(ownerId) {
+  const D = profileWeekData(ownerId), w = D.week;
+  const range = sun => `${fmtDateEn(PD.labelDate(sun))} – ${fmtDateEn(PD.labelDate(PD.addDays(sun, 6)))}`;
+  const soFar = D.current ? " so far" : "";
+  const runsWord = n => `${n} run${n === 1 ? "" : "s"}`;
+
+  const distance = w.known
+    ? `<div class="value">${fmtKm(w.km)}<span class="unit">km</span></div><div class="pw-note">${runsWord(w.runs)}${soFar}</div>`
+    : `<div class="value pw-none">No data</div><div class="pw-note">No sync has covered this week</div>`;
+  const sleep = D.sleep.n
+    ? `<div class="value">${fmtHoursMin(D.sleep.hours).replace(" hours", "")}<span class="unit">h / night</span></div><div class="pw-note">${D.sleep.n} of ${D.sleep.of} nights recorded</div>`
+    : `<div class="value pw-none">No data</div><div class="pw-note">No nights recorded${soFar}</div>`;
+
+  const trendItems = D.trend.map(t => ({
+    label: t.current ? "This week" : fmtDateEn(PD.labelDate(t.sunday)), value: t.km, state: t.known ? "ok" : "na", partial: t.current,
+    say: t.known ? `${range(t.sunday)}${t.current ? " (so far)" : ""}: ${fmtKm(t.km)} km in ${runsWord(t.runs)}` : `${range(t.sunday)}: no data, ${t.loaded ? "no sync has covered this week" : "older than the last 90 days"}`,
+  }));
+  const kmTop = Math.max(10, Math.ceil(Math.max(0, ...D.trend.filter(t => t.known).map(t => t.km)) / 10) * 10);
+
+  const stepItems = D.steps.map(d => ({
+    label: WEEKDAY_EN[d.i], value: d.steps || 0, state: d.future ? "future" : d.steps != null ? "ok" : "na", partial: d.today,
+    say: `${WEEKDAY_EN[d.i]} ${fmtDateEn(PD.labelDate(d.date))}: ` + (d.future ? "not yet" : d.steps != null ? `${d.steps.toLocaleString("en-US")} steps${d.today ? " so far" : ""}` : "no data"),
+  }));
+  const stepsTop = Math.max(5000, Math.ceil(Math.max(0, ...D.steps.map(d => d.steps || 0)) / 5000) * 5000);
+  if (profileSel.steps == null || profileSel.steps > 6) { // default: today, else the last day with a count, else Sunday
+    const t = D.steps.findIndex(d => d.today), last = D.steps.map(d => d.steps != null).lastIndexOf(true);
+    profileSel.steps = t >= 0 ? t : last >= 0 ? last : 0;
+  }
+
+  return `<div class="pw-nav">
+      <button type="button" class="week-nav-btn" data-pw="prev" aria-label="Previous week"${D.canPrev ? "" : " disabled"}>‹</button>
+      <div class="pw-range"><b>${esc(range(D.sunday))}</b>${D.current ? " · this week" : ""}</div>
+      <button type="button" class="week-nav-btn" data-pw="next" aria-label="Next week"${D.canNext ? "" : " disabled"}>›</button>
+    </div>
+    <div class="pw-pair">
+      <div class="pw-stat"><div class="label">Running distance</div>${distance}</div>
+      <div class="pw-stat"><div class="label">Sleep</div>${sleep}</div>
+    </div>
+    <div class="section-title">Weekly kilometers · 5 weeks</div>
+    ${miBarsHtml("trend", trendItems, profileSel.trend, { value: kmTop, label: `${kmTop} km` })}
+    <div class="section-title">Steps</div>
+    ${miBarsHtml("steps", stepItems, profileSel.steps, { value: stepsTop, label: fmtSteps(stepsTop) })}
+    <div class="pw-fresh">${freshHtml(D.checked, "Checked Intervals.icu")}</div>`;
+}
+
+function renderProfileWeek(focusSelector) {
+  const el = document.getElementById("profileWeek");
+  if (!el || !profileOwner) return;
+  el.innerHTML = profileWeekHtml(profileOwner);
+  if (focusSelector) el.querySelector(focusSelector)?.focus();
+}
+function onProfileWeekEvent(e) {
+  const nav = e.target.closest("[data-pw]");
+  if (nav && e.type === "click") {
+    if (nav.disabled) return;
+    profileWeekOffset += nav.dataset.pw === "prev" ? -1 : 1;
+    profileSel.trend = 4; profileSel.steps = null;
+    renderProfileWeek(`[data-pw="${nav.dataset.pw}"]`);
+    return;
+  }
+  const bar = e.target.closest("[data-mi][data-chart]");
+  if (!bar) return;
+  const chart = bar.dataset.chart, i = +bar.dataset.mi;
+  if (e.type === "focusin" && profileSel[chart] === i) return;
+  profileSel[chart] = i;
+  renderProfileWeek(`[data-chart="${chart}"][data-mi="${i}"]`);
+}
+
 function openProfile(ownerId) {
   const r = runnerById(ownerId);
   if (!r) return;
+  if (profileOwner !== ownerId) { profileWeekOffset = 0; profileSel.trend = 4; profileSel.steps = null; }
+  profileOwner = ownerId;
   const mine = ACTIVITIES.filter(a => a.ownerId === ownerId && !a.hidden && a.distanceInMeters > 0 && a.durationInSeconds > 0)
     .sort((x, y) => y.startTimeInSeconds - x.startTimeInSeconds);
   const totalKm = mine.reduce((t, a) => t + km(a), 0);
-  const totalSec = mine.reduce((t, a) => t + movingSec(a), 0); // for the average pace
   const longest = mine.reduce((best, a) => (!best || a.distanceInMeters > best.distanceInMeters) ? a : best, null);
   const fast5 = mine.filter(a => km(a) >= 5).reduce((best, a) => (!best || paceOf(a) < paceOf(best)) ? a : best, null);
 
@@ -1861,17 +1988,6 @@ function openProfile(ownerId) {
     longest ? pbRow("Longest run", `${fmtKm(km(longest))} km`, recDate(longest.startTimeInSeconds), longest.activityId) : "",
     fast5 ? pbRow("Fastest 5 km+", `${fmtPace(paceOf(fast5))} /km`, `${fmtKm(km(fast5))} km · ${recDate(fast5.startTimeInSeconds)}`, fast5.activityId) : "",
   ].join("") || `<div class="empty-note" style="padding:8px 0">No runs yet</div>`;
-
-  // Sleep is personal, so it lives here and not on the home page.
-  const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const sleepAvg = nDays => {
-    const from = ymd(new Date(Date.now() - nDays * DAY));
-    const nights = SLEEP.filter(x => x.ownerId === ownerId && x.sleepSecs != null && x.date >= from);
-    return nights.length ? { hours: nights.reduce((t, x) => t + x.sleepSecs, 0) / nights.length / 3600, n: nights.length } : null;
-  };
-  const sl7 = sleepAvg(7), sl30 = sleepAvg(30);
-  const sleepHtml = sl7 || sl30 ? `<div class="section-title">Sleep</div><div class="rec-history">${[["Last 7 nights", sl7], ["Last 30 nights", sl30]].filter(([, v]) => v)
-    .map(([label, v]) => `<div class="rec-history-row" style="cursor:default"><span style="min-width:110px;color:var(--text-muted)">${label}</span><b>${fmtHoursMin(v.hours)}</b><span class="gs-session-meta">average · ${v.n} night${v.n > 1 ? "s" : ""} recorded</span></div>`).join("")}</div>` : "";
 
   const sessions = groupSessions().filter(s => s.runnerIds.has(ownerId));
   const sessionsHtml = sessions.length ? `<div class="section-title">Group sessions (${sessions.length})</div><div class="rec-history">${sessions.slice(0, 5).map(s => {
@@ -1902,21 +2018,23 @@ function openProfile(ownerId) {
       </div>
       <button class="close-btn" id="closeSheet">Close ✕</button>
     </div>
-    <div class="mini-tiles">
+    <div id="profileWeek" class="profile-week">${profileWeekHtml(ownerId)}</div>
+    <div class="section-title">Last 90 days</div>
+    <div class="mini-tiles three">
       <div class="mini-tile"><div class="label">Runs</div><div class="value">${mine.length}</div></div>
       <div class="mini-tile"><div class="label">Distance</div><div class="value">${fmtKm(totalKm)} km</div></div>
-      <div class="mini-tile"><div class="label">Avg pace</div><div class="value">${totalKm ? fmtPace(totalSec / totalKm) : "-"}</div></div>
       <div class="mini-tile"><div class="label">Longest</div><div class="value">${longest ? fmtKm(km(longest)) + " km" : "-"}</div></div>
     </div>
-    <div class="chart-note" style="margin:-8px 0 8px">Totals cover the last 90 days</div>
     ${bodyHtml}
     <div class="section-title">Personal bests</div>
     <div class="rec-history">${pbHtml}</div>
-    ${sleepHtml}${sessionsHtml}
+    ${sessionsHtml}
     <div class="section-title">Recent workouts</div>
     <div class="rec-history">${recent || '<div class="empty-note" style="padding:8px 0">No runs yet</div>'}</div>`;
   document.getElementById("overlay").style.display = "block";
   document.getElementById("closeSheet").addEventListener("click", closeDetail);
+  document.getElementById("profileWeek").addEventListener("click", onProfileWeekEvent);
+  document.getElementById("profileWeek").addEventListener("focusin", onProfileWeekEvent);
   document.getElementById("profilePhotoInput")?.addEventListener("change", e => changeProfilePhoto(ownerId, e.target.files[0]));
   document.getElementById("bodyEditBtn")?.addEventListener("click", () => {
     const f = document.getElementById("bodyEditForm");
@@ -2700,6 +2818,17 @@ async function supaGet(pathWithQuery, accessToken) {
   return res.json();
 }
 
+// Reads every row of a query in pages of 1000 (the server's page size), so a growing table is never cut off silently.
+async function supaGetAll(pathWithQuery, accessToken, pageSize = 1000, maxPages = 50) {
+  const out = [];
+  for (let page = 0; page < maxPages; page++) {
+    const rows = await supaGet(`${pathWithQuery}&limit=${pageSize}&offset=${page * pageSize}`, accessToken);
+    out.push(...rows);
+    if (rows.length < pageSize) return out;
+  }
+  throw new Error("Too many rows: " + pathWithQuery); // 50,000+ rows means something is wrong; better visible than silently partial
+}
+
 async function supaRpc(fn, accessToken, args = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: "POST",
@@ -2966,7 +3095,7 @@ async function loadFromSupabase(accessToken) {
     supaRpc("my_runner_id", accessToken).catch(() => null),
     supaGet(`activity_details?select=activityId,sig:streams->sig&fetchedAt=gte.${cutoffDate}&order=fetchedAt.desc&limit=1000`, accessToken).catch(() => []),
     supaRpc("author_runners", accessToken).catch(() => []), // author_names.sql not run yet -> short names stay, nothing breaks
-    supaGet(`daily_steps?select=ownerId,date,steps&date=gte.${cutoffDate}&limit=1000`, accessToken).catch(() => []), // daily_steps.sql not run yet -> empty graph, nothing breaks
+    supaGetAll(`daily_steps?select=ownerId,date,steps&date=gte.${cutoffDate}&order=date,ownerId`, accessToken).catch(() => []), // daily_steps.sql not run yet -> empty graph, nothing breaks
     supaGet(`runner_fitness?select=*`, accessToken).catch(() => []), // runner_stats.sql not run yet -> no fitness rows, nothing breaks
     supaGet(`runner_body?select=*`, accessToken).catch(() => []), // only your own row (or all, for a coach) comes back
     supaGet(`run_notes?select=activityId,text,coverPhotoUrl&updatedAt=gte.${cutoffDate}`, accessToken).catch(() => []), // run_descriptions.sql not run yet -> no descriptions
