@@ -47,7 +47,11 @@
   // computer set to Israel time (not CI) stores real UTC instead; production data comes from CI.
   const activityYMD = startTimeInSeconds => new Date(startTimeInSeconds * 1000).toISOString().slice(0, 10);
 
-  const api = { TZ, israelYMD, addDays, weekdayOf, sundayOf, planWeekKey, labelDate, activityYMD };
+  // A moment on the device clock, moved onto that same "local time written as UTC" scale, so it can be compared with
+  // stored start times: the device's local 22:30 Saturday becomes Saturday 22:30Z.
+  const wallMs = d => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
+
+  const api = { TZ, israelYMD, addDays, weekdayOf, sundayOf, planWeekKey, labelDate, activityYMD, wallMs };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.PlanDates = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

@@ -67,6 +67,18 @@ test("documented fallback: without start_date_local the day is the UTC date (a d
   assert.deepEqual(normalizedDayInCI(afterMidnight), ["2026-11-21", "2026-11-15"]); // known limitation: counted on Saturday
 });
 
+test("wallMs puts a device-local moment on the stored start-time scale (any device time zone)", () => {
+  const script = `const D=require(${JSON.stringify(path.join(__dirname, "..", "plan-dates.js"))});
+    const sun = new Date(2026, 10, 22, 0, 0, 0); // device-local Sunday midnight, start of the page's week
+    const stored = Date.UTC(2026, 10, 21, 22, 30) / 1000; // a run at Sat 22:30 local, as the sync stores it
+    console.log(JSON.stringify([D.wallMs(sun) === Date.UTC(2026, 10, 22), stored * 1000 < D.wallMs(sun),
+      new Date(stored * 1000).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" })]));`;
+  for (const tz of ["Asia/Jerusalem", "UTC", "America/New_York"]) {
+    const r = execFileSync(process.execPath, ["-e", script], { env: { ...process.env, TZ: tz } }).toString().trim();
+    assert.equal(r, JSON.stringify([true, true, "22:30"]), tz); // in the previous week, shown as 22:30
+  }
+});
+
 test("same results whatever time zone the device is set to", () => {
   const script = `const D=require(${JSON.stringify(path.join(__dirname, "..", "plan-dates.js"))});
     console.log(JSON.stringify([D.israelYMD(new Date("2026-11-20T22:30:00Z")), D.planWeekKey(D.sundayOf(D.israelYMD(new Date("2026-11-20T22:30:00Z")))), D.addDays("2026-10-18", 7), D.labelDate("2026-10-25").getDate()]))`;

@@ -729,6 +729,11 @@ const colorOf = () => getComputedStyle(document.documentElement).getPropertyValu
 
 const DAY = 86400000;
 const weekStart = d => { const x = new Date(d); x.setHours(0,0,0,0); x.setDate(x.getDate() - x.getDay()); return x; }; // Sunday
+// Activity start times (startTimeInSeconds) hold the runner's LOCAL wall-clock time written as if it were UTC (the sync
+// parses Intervals.icu's start_date_local on GitHub Actions, which runs in UTC). So: format them with timeZone "UTC"
+// (WALL), and compare them with wallMs() of a device-local moment, never with Date#getTime(). See plan-dates.js.
+const WALL = { timeZone: "UTC" };
+const wallMs = d => window.PlanDates.wallMs(d);
 // Training-plan weeks are counted in Israel time with calendar-day steps (plan-dates.js), whatever the phone's time zone.
 // offset: 0 = this week, -1 = last week... key = the plan_history weekStart for that week (stored format, see plan-dates.js).
 const PD = window.PlanDates;
@@ -784,7 +789,7 @@ function buildDemoActivities() {
           ownerId: runner.id,
           activityType: "RUNNING",
           activityName: isLong ? "Long run" : (paceSec < runner.paceSec * 0.97 ? "Tempo workout" : "Easy run"),
-          startTimeInSeconds: Math.floor(start.getTime() / 1000),
+          startTimeInSeconds: Math.floor(wallMs(start) / 1000), // wall-clock, like the real sync
           distanceInMeters: Math.round(km * 1000),
           durationInSeconds: Math.round(km * paceSec),
           averageHeartRateInBeatsPerMinute: Math.round(runner.hr + (paceSec < runner.paceSec ? 6 : -2) + between(-4, 4)),
@@ -825,7 +830,7 @@ const fmtDur = sec => {
 const runnerById = id => RUNNERS.find(r => r.id === id);
 const WEEKDAY_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]; // index = Date#getDay(), always Sun -> Sat, left to right
 const fmtDateEn = d => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-const fmtDate = ts => new Date(ts * 1000).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+const fmtDate = ts => new Date(ts * 1000).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", ...WALL }); // activity start times only
 // Everything users can type (comments, highlights, race names, activity names...) goes through esc() before it is put into
 // the page as HTML — otherwise text like <img onerror=...> would run in other members' browsers.
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -908,10 +913,10 @@ function weekBounds() {
 // The viewed calendar week (Sun -> Sat) - the one time control every weekly card follows.
 function thisWeekActs() {
   const { start } = weekBounds();
-  const startMs = start.getTime();
+  const wallStart = wallMs(start); // same wall-clock scale as startTimeInSeconds
   return ACTIVITIES.filter(a => {
     const t = a.startTimeInSeconds * 1000;
-    return t >= startMs && t < startMs + 7 * DAY && matchesRunner(a);
+    return t >= wallStart && t < wallStart + 7 * DAY && matchesRunner(a);
   });
 }
 
@@ -1433,9 +1438,9 @@ function renderFeed() {
   const loadMoreBtn = document.getElementById("feedLoadMore");
   let all, acts;
   if (bySingleRunner) {
-    const end = weekStart(TODAY).getTime() + 7 * DAY; // end of this week
-    const oldestLoadable = TODAY.getTime() - 90 * DAY; // matches the server-side fetch cutoff
-    const start = Math.max(weekStart(TODAY).getTime() - (feedWeeksLoaded - 1) * 7 * DAY, oldestLoadable);
+    const end = wallMs(weekStart(TODAY)) + 7 * DAY; // end of this week (wall-clock scale, like startTimeInSeconds)
+    const oldestLoadable = wallMs(TODAY) - 90 * DAY; // matches the server-side fetch cutoff
+    const start = Math.max(wallMs(weekStart(TODAY)) - (feedWeeksLoaded - 1) * 7 * DAY, oldestLoadable);
     all = ALL_ACTIVITIES.filter(a => !a.hidden && matchesRunner(a) && a.startTimeInSeconds * 1000 >= start && a.startTimeInSeconds * 1000 < end)
       .sort((a, b) => b.startTimeInSeconds - a.startTimeInSeconds);
     acts = all;
@@ -1603,7 +1608,7 @@ function recordBadgeHtml(activityId) {
 const isNewRecord = activityId => { const r = RECORD_BY_ACTIVITY.get(String(activityId)); return !!r && r.previousSeconds != null; };
 
 /* ---------- Date format used by the profile's personal bests ---------- */
-const recDate = ts => new Date(ts * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+const recDate = ts => new Date(ts * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", ...WALL });
 
 /* ---------- Group sessions: detected automatically from the runs themselves ----------
    A block = 3+ different runners whose runs started within 5 min of each other and cover about the
@@ -1748,8 +1753,8 @@ function renderGroupSessions() {
   card.style.display = "";
   // A session from today is the news, so it goes right under the highlight. An older one belongs with
   // the other history, below the graphs.
-  const todayStr = new Date().toDateString();
-  const anchor = document.getElementById(new Date(sessions[0].start * 1000).toDateString() === todayStr ? "tiles" : "planCard");
+  const todayStr = new Date(wallMs(new Date())).toISOString().slice(0, 10);
+  const anchor = document.getElementById(PD.activityYMD(sessions[0].start) === todayStr ? "tiles" : "planCard");
   if (card.nextElementSibling !== anchor) anchor.parentNode.insertBefore(card, anchor);
   const hidden = groupCardHidden();
   document.getElementById("groupToggle").textContent = hidden ? "Show" : "Hide";
@@ -1766,7 +1771,7 @@ function renderGroupSessions() {
     const records = s.blocks.flatMap(b => b.members).filter(m => isNewRecord(m.activityId)).length;
     const head = `<button class="gs-session-head" type="button" data-session="${esc(s.id)}" aria-expanded="${open}">
       <span class="gs-caret">${open ? "▾" : "▸"}</span>
-      <span class="gs-session-title">${when.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · ${when.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
+      <span class="gs-session-title">${when.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", ...WALL })} · ${when.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, ...WALL })}</span>
       <span class="gs-session-meta">${s.runnerIds.size} runners · ${s.blocks.length} block${s.blocks.length > 1 ? "s" : ""}${records ? ` · 🏅 ${records} new 10K record${records > 1 ? "s" : ""}` : ""}</span>
     </button>`;
     if (!open) return `<div class="gs-session">${head}</div>`;
@@ -1838,7 +1843,7 @@ document.getElementById("groupBody").addEventListener("click", e => {
 function groupResultsHtml(activityId) {
   const b = findGroupBlock(activityId);
   if (!b) return "";
-  const when = new Date(b.start * 1000).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  const when = new Date(b.start * 1000).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", ...WALL });
   return `<div class="section-title">Group results · ${when} · ${esc(blockLabel(b))} (${fmtKm(b.avgKm)} km)</div>
     ${groupTableHtml(b.members, activityId)}${othersHtml(b)}
     <div class="chart-note">Ranked by pace · tap a runner to open their run</div>`;
@@ -1998,7 +2003,7 @@ function renderGroupLine() {
   const s = groupSessions().find(x => !r || x.runnerIds.has(selectedRunnerId));
   el.hidden = !s;
   if (!s) { el.innerHTML = ""; delete el.dataset.session; return; }
-  const when = new Date(s.start * 1000).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  const when = new Date(s.start * 1000).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", ...WALL });
   el.dataset.session = s.id;
   el.innerHTML = `<span aria-hidden="true">🤝</span><b>Latest group session${r ? ` · ${esc(r.name)}` : ""}</b><span class="gl-meta">${esc(when)} · ${s.runnerIds.size} runners · ${s.blocks.length} block${s.blocks.length > 1 ? "s" : ""}</span><span aria-hidden="true">›</span>`;
 }
@@ -2083,7 +2088,7 @@ function openProfile(ownerId) {
     const b = s.blocks.find(x => x.role === "main") || s.blocks.slice().sort((x, y) => y.avgKm - x.avgKm)[0];
     const idx = b.members.findIndex(m => m.ownerId === ownerId);
     const m = idx >= 0 ? b.members[idx] : s.blocks.flatMap(x => x.members).find(x => x.ownerId === ownerId);
-    const when = new Date(s.start * 1000).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    const when = new Date(s.start * 1000).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", ...WALL });
     const result = idx >= 0 ? `${blockLabel(b)} · ${rankWord(idx + 1)} of ${b.members.length} · ${fmtDur(m.durationInSeconds)}` : `${s.blocks.length} block${s.blocks.length > 1 ? "s" : ""}`;
     return `<div class="rec-history-row" data-open-activity="${esc(m.activityId)}"><span>${when}</span><span class="gs-session-meta">${esc(result)}</span></div>`;
   }).join("")}</div>` : "";
