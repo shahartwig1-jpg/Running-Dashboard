@@ -114,8 +114,8 @@
     padding: 3px 10px; background: var(--surface-1);
   }
   .hero .demo-badge { color: #fff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.14); }
-  .hero #themeToggle, .hero #signOutBtn, .hero #notifyBtn, .hero #myProfileBtn { color: #fff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.14); }
-  .hero #themeToggle:hover, .hero #signOutBtn:hover, .hero #notifyBtn:hover, .hero #myProfileBtn:hover { background: rgba(255,255,255,0.24); }
+  .hero #themeToggle, .hero #signOutBtn, .hero #notifyBtn, .hero #myProfileBtn, .hero #plansBtn { color: #fff; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.14); }
+  .hero #themeToggle:hover, .hero #signOutBtn:hover, .hero #notifyBtn:hover, .hero #myProfileBtn:hover, .hero #plansBtn:hover { background: rgba(255,255,255,0.24); }
   .subtitle { font-size: 13px; color: var(--text-muted); margin-bottom: 18px; }
   .hero .subtitle { color: rgba(255,255,255,0.88); margin-bottom: 0; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
 
@@ -124,7 +124,7 @@
   .jump-nav::-webkit-scrollbar { display: none; }
   .jump-nav button { flex: 0 0 auto; font: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--text-secondary); background: none; border: 1px solid var(--border); border-radius: 999px; padding: 5px 13px; cursor: pointer; }
   .jump-nav button:hover { color: var(--accent); border-color: var(--accent); }
-  #tiles, #groupCard, #stepsCard, #planCard, #racesCard, #feedCard, #highlightCard { scroll-margin-top: 56px; }
+  #cardsRow, #groupCard, #racesCard, #feedCard, #highlightCard { scroll-margin-top: 56px; }
   .filters { display: flex; gap: 8px; margin-bottom: 18px; }
   .filters button {
     font: inherit; font-size: 13px; cursor: pointer;
@@ -279,19 +279,9 @@
   #tbody tr { cursor: pointer; }
   #tbody tr:hover td { background: var(--grid); }
 
-  /* Home top (mobile-first): Today card, five-week mileage, latest group session */
+  /* Home top: latest group session + when the data was last checked; .mi-* bars are also used in the profile */
   .home-top { display: grid; gap: 12px; margin-bottom: 14px; }
   .home-top[hidden], .home-top [hidden] { display: none !important; }
-  .today-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-  .today-card .today-when { font-size: 12px; color: var(--text-muted); }
-  .today-main { font-size: 17px; font-weight: 600; margin: 8px 0 4px; line-height: 1.35; overflow-wrap: anywhere;
-    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-  .today-main.muted { color: var(--text-muted); font-weight: 500; }
-  .today-next { font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-top: 8px; }
-  .today-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
-  .btn-primary { font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; color: #fff; background: var(--accent);
-    border: 1px solid var(--accent); border-radius: 10px; padding: 8px 16px; min-height: 40px; }
-  .btn-primary:hover { filter: brightness(1.05); }
   .fresh-note { font-size: 11px; color: var(--text-muted); }
   .fresh-note.stale { color: var(--accent); }
   .mi-chart { display: flex; align-items: flex-end; gap: 8px; height: 132px; margin-top: 10px; position: relative; }
@@ -308,6 +298,8 @@
   .mi-bar:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .mi-readout { font-size: 13px; margin-top: 8px; min-height: 18px; color: var(--text-secondary); }
   .mi-readout b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .plans-bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 12px 0 8px; }
+  .plans-bar select { flex: 1 1 180px; min-height: 36px; }
   .group-line { display: flex; align-items: center; gap: 8px; width: 100%; text-align: start; font: inherit; font-size: 13px; cursor: pointer;
     color: var(--text-primary); background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; min-height: 44px; }
   .group-line .gl-meta { color: var(--text-muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -588,6 +580,7 @@
         <h1>🏃 Running Group Dashboard</h1>
         <span class="demo-badge" id="badge">Demo data</span>
         <button id="myProfileBtn" class="week-nav-btn" type="button" style="display:none">👤 My profile</button>
+        <button id="plansBtn" class="week-nav-btn" type="button" style="display:none">📝 Plans</button>
         <button id="themeToggle" type="button" title="Toggle dark mode">🌙</button>
         <button id="notifyBtn" type="button" style="display:none">🔔 Notify me</button>
         <button id="signOutBtn" type="button" style="display:none">Sign out</button>
@@ -601,14 +594,7 @@
     <span class="notify-prompt-actions"><button id="notifyPromptOn" class="week-nav-btn" type="button">Turn on</button><button id="notifyPromptLater" class="week-nav-btn" type="button">Not now</button></span>
   </div>
 
-  <section id="homeTop" class="home-top" aria-label="Today">
-    <div class="card today-card" id="todayCard" hidden></div>
-    <div class="card" id="mileageCard" hidden>
-      <h2>My weekly kilometers</h2>
-      <div class="sub" style="margin-bottom:0">Runs only · last 4 weeks and this week so far</div>
-      <div class="mi-chart" id="mileageChart"></div>
-      <div class="mi-readout" id="mileageReadout" aria-live="polite"></div>
-    </div>
+  <section id="homeTop" class="home-top" aria-label="Latest">
     <button type="button" class="group-line" id="groupLine" hidden></button>
     <div class="fresh-note" id="groupFresh" hidden></div>
   </section>
@@ -618,7 +604,7 @@
   <div class="filters" role="group" aria-label="Showing" id="runnerFilters"></div>
   <div id="profileLink" style="margin:2px 0 6px;"></div>
 
-  <div style="display:flex; align-items:baseline; justify-content:space-between; gap:8px; flex-wrap:wrap; margin:14px 0 6px;">
+  <div id="weekNavRow" style="display:flex; align-items:baseline; justify-content:space-between; gap:8px; flex-wrap:wrap; margin:14px 0 6px;">
     <div class="sub" id="weekRangeSub"></div>
     <div style="display:flex; gap:6px;">
       <button id="weekPrev" class="week-nav-btn" type="button">‹ Previous week</button>
@@ -645,32 +631,12 @@
     <div id="groupBody"></div>
   </div>
 
-  <div class="tiles" id="tiles"></div>
-
   <div class="cards" id="cardsRow">
     <div class="card" id="barCard">
       <h2>Weekly kilometers per Angel</h2>
       <div class="sub" id="barSub"></div>
       <div id="barChart"></div>
     </div>
-    <div class="card" id="stepsCard">
-      <h2>Daily steps</h2>
-      <div class="sub" id="stepsSub"></div>
-      <div id="stepsChart"></div>
-    </div>
-  </div>
-
-  <div class="card" id="planCard">
-    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:8px; flex-wrap:wrap;">
-      <h2>Weekly training plan</h2>
-      <div style="display:flex; gap:6px;">
-        <button id="planEditBtn" class="week-nav-btn" type="button" style="display:none;">Edit</button>
-        <button id="planPrev" class="week-nav-btn" type="button">‹ Previous week</button>
-        <button id="planNext" class="week-nav-btn" type="button">Next week ›</button>
-      </div>
-    </div>
-    <div class="sub" id="planSub"></div>
-    <div id="planChart"></div>
   </div>
 
   <div class="card" id="racesCard">
@@ -754,8 +720,11 @@ let ALL_ACTIVITIES = []; // runs plus rides, swims and strength sessions: the fe
 let SLEEP = [];
 let STEPS = []; // daily_steps rows: { ownerId, date, steps } (empty until supabase/daily_steps.sql is run and a sync has filled it)
 let PLAN_HISTORY = {}; // ownerId -> { weekStartISO -> array of 7 day strings (Sun -> Sat) }
-let planWeekOffset = 0; // 0 = this week, -1 = last week, etc. — reset to 0 whenever the runner selection changes
-let planEditing = false; // reset to false whenever the runner/week changes, see below
+// Coach Plans panel (header "📝 Plans"): its own runner/week/edit state, so it never changes what the home page shows.
+let plansRunnerId = null; // the runner whose week is shown; SHARED = the several-runners shared-workout tool
+const SHARED = "__shared";
+let plansWeekOffset = 0;  // 0 = this week (Israel time), plans can be written ahead, so future weeks are allowed
+let plansEditing = false;
 let HIGHLIGHTS = []; // weekly_highlights rows, each with a nested weekly_highlight_photos array
 let RACES = []; // races rows, each with a nested race_rsvps array ({ authorName }); [] until races.sql runs
 let raceFormOpen = false;
@@ -857,7 +826,6 @@ let selectedRunnerId = null; // null = everyone
 // same weekBounds()/thisWeekActs() — one nav control for "the general weekly runs" and
 // "the personal" (per-runner) view alike, so a coach can page both back in lockstep.
 let weekOffset = 0;
-let sharedWorkoutOpen = false; // the coach's bulk "shared workout" form stays folded away until asked for
 let highlightFormOpen = false; // the "share a highlight" form stays folded away until asked for
 // How many weeks back "Recent activities" shows for the selected runner, growing one week
 // at a time via the "Load previous week" button — deliberately separate from weekOffset so
@@ -1144,30 +1112,15 @@ function renderRunnerFilters() {
       ${runnerAvatarHtml(r, "sm")}${esc(r.name)}</button>`).join("");
 }
 
-function renderTiles() {
-  const acts = thisWeekActs(); // every tile follows the viewed week
-  const totalSec = acts.reduce((s, a) => s + a.durationInSeconds, 0);
-  const totalKmForPace = acts.reduce((s, a) => s + km(a), 0);
-  const avgPace = totalKmForPace ? acts.reduce((s, a) => s + movingSec(a), 0) / totalKmForPace : 0;
-  const hrW = acts.reduce((s, a) => s + (a.averageHeartRateInBeatsPerMinute || 0) * a.durationInSeconds, 0);
-  const weeklyKm = thisWeekActs().reduce((s, a) => s + km(a), 0);
-  document.getElementById("tiles").innerHTML = `
-    <div class="tile"><div class="label">Weekly distance</div><div class="value">${fmtKm(weeklyKm)}<span class="unit">km</span></div></div>
-    <div class="tile"><div class="label">Activities</div><div class="value">${acts.length}</div></div>
-    <div class="tile"><div class="label">Avg pace</div><div class="value">${fmtPace(avgPace)}<span class="unit">min/km</span></div></div>
-    <div class="tile"><div class="label">Avg HR</div><div class="value">${totalSec ? Math.round(hrW / totalSec) : 0}<span class="unit">bpm</span></div></div>`;
-}
-
 function renderBars() {
   const cardsRow = document.getElementById("cardsRow");
   const barCard = document.getElementById("barCard");
   if (selectedRunnerId !== null) {
-    barCard.style.display = "none";
-    cardsRow.classList.add("single");
+    barCard.style.display = cardsRow.style.display = "none";
     return;
   }
-  barCard.style.display = "";
-  cardsRow.classList.remove("single");
+  barCard.style.display = cardsRow.style.display = "";
+  cardsRow.classList.add("single"); // the steps chart that used to sit beside it is gone
 
   // The viewed calendar week (Sun -> Sat, see weekOffset), not the 7/30-day toggle —
   // same convention as "Weekly distance" and "Km per weekday", so all three agree.
@@ -1208,63 +1161,63 @@ function fmtHoursMin(hours) {
 }
 
 
-function renderPlan() {
-  const card = document.getElementById("planCard");
-  card.style.display = "";
-  const sub = document.getElementById("planSub"), el = document.getElementById("planChart");
-  const prevBtn = document.getElementById("planPrev"), nextBtn = document.getElementById("planNext");
-  const editBtn = document.getElementById("planEditBtn");
-
-  if (selectedRunnerId === null) {
-    editBtn.style.display = "none"; // the per-runner Edit/Cancel toggle doesn't apply here
-    if (!isCoach()) {
-      card.style.display = "none"; // plans are personal: nothing to show until a runner is picked
-      return;
-    }
-    // Coach + "All" selected: instead of one runner's grid, offer a bulk tool — the same
-    // workout text applied to several runners' plans for one day at once (a shared group
-    // session, e.g. "we're all doing this tomorrow"), rather than repeating the single-
-    // runner editor once per person.
-    prevBtn.disabled = false;
-    nextBtn.disabled = false; // unlike activity data, plans are written in advance — future weeks are valid
-    prevBtn.style.display = nextBtn.style.display = sharedWorkoutOpen ? "" : "none";
-    if (!sharedWorkoutOpen) { // an empty form takes a whole screen of space: one line and a button instead
-      sub.textContent = "Set one workout for several runners at once";
-      el.innerHTML = `<button id="sharedWorkoutOpen" class="week-nav-btn" type="button">+ Add a shared workout</button>`;
-      document.getElementById("sharedWorkoutOpen").addEventListener("click", () => { sharedWorkoutOpen = true; renderPlan(); });
-      return;
-    }
-    const pw = planWeek(planWeekOffset);
-    sub.textContent = `Shared workout · ${fmtDateEn(pw.start)} – ${fmtDateEn(pw.end)}` + (planWeekOffset === 0 ? " (this week)" : "");
-    renderSharedWorkoutTool(el, pw);
-    return;
+// The coach's Plans panel (side sheet). Per-runner week grid with Edit, or the shared-workout tool for several runners
+// at once. Coach-only in the UI; the real rule is the RLS policy on plan_history (supabase/roles.sql).
+function openPlans(opener) {
+  if (!isCoach()) return;
+  if (opener) {
+    focusBeforeSheet = opener;
+    plansWeekOffset = 0; plansEditing = false;
+    if (!plansRunnerId) plansRunnerId = (RUNNERS[0] || {}).id || SHARED;
+    document.getElementById("sheet").scrollTop = 0;
   }
-  prevBtn.style.display = nextBtn.style.display = "";
-  prevBtn.disabled = false;
-  nextBtn.disabled = false; // unlike activity data, plans are written in advance — future weeks are valid
-  editBtn.style.display = isCoach() ? "" : "none";
-  editBtn.textContent = planEditing ? "Cancel" : "Edit";
+  document.getElementById("overlay").style.display = "block";
+  renderPlan();
+}
 
-  const r = runnerById(selectedRunnerId);
-  const pw = planWeek(planWeekOffset);
+function renderPlan() {
+  const sheet = document.getElementById("sheet");
+  const pw = planWeek(plansWeekOffset);
+  const range = `${fmtDateEn(pw.start)} – ${fmtDateEn(pw.end)}` + (plansWeekOffset === 0 ? " (this week)" : "");
+  const shared = plansRunnerId === SHARED;
+  sheet.innerHTML = `<div class="sheet-head"><div><h3>Training plans</h3><div class="sheet-sub" style="margin-bottom:0">${esc(range)}</div></div>
+      <button class="close-btn" id="closeSheet">Close ✕</button></div>
+    <div class="plans-bar">
+      <select id="plansWho" class="plan-edit-input" aria-label="Whose plan">
+        ${RUNNERS.map(r => `<option value="${esc(r.id)}"${r.id === plansRunnerId ? " selected" : ""}>${esc(r.name)}</option>`).join("")}
+        <option value="${SHARED}"${shared ? " selected" : ""}>Shared workout (several runners)</option>
+      </select>
+      ${shared ? "" : `<button id="planEditBtn" class="week-nav-btn" type="button">${plansEditing ? "Cancel" : "Edit"}</button>`}
+    </div>
+    <div class="plans-bar">
+      <button id="planPrev" class="week-nav-btn" type="button">‹ Previous week</button>
+      <button id="planNext" class="week-nav-btn" type="button">Next week ›</button>
+      ${plansWeekOffset !== 0 ? `<button id="planThisWeek" class="week-nav-btn" type="button">This week</button>` : ""}
+    </div>
+    <div id="planChart"></div>`;
+  document.getElementById("closeSheet").addEventListener("click", closeDetail);
+  const keep = (id, fn) => () => { fn(); renderPlan(); document.getElementById(id)?.focus(); };
+  document.getElementById("plansWho").addEventListener("change", e => { plansRunnerId = e.target.value; plansEditing = false; renderPlan(); document.getElementById("plansWho").focus(); });
+  document.getElementById("planPrev").addEventListener("click", keep("planPrev", () => { plansWeekOffset--; plansEditing = false; }));
+  document.getElementById("planNext").addEventListener("click", keep("planNext", () => { plansWeekOffset++; plansEditing = false; }));
+  document.getElementById("planThisWeek")?.addEventListener("click", keep("planNext", () => { plansWeekOffset = 0; plansEditing = false; }));
+  document.getElementById("planEditBtn")?.addEventListener("click", keep("planEditBtn", () => { plansEditing = !plansEditing; }));
+
+  const el = document.getElementById("planChart");
+  if (shared) { renderSharedWorkoutTool(el, pw); return; }
+
+  const ownerId = plansRunnerId;
   const weekStartStr = pw.key;
-  const days = (PLAN_HISTORY[selectedRunnerId] || {})[weekStartStr];
-  const rangeLabel = `${fmtDateEn(pw.start)} – ${fmtDateEn(pw.end)}`;
-  sub.textContent = `${r.name} · ${rangeLabel}` + (planWeekOffset === 0 ? " (this week)" : "");
+  const days = (PLAN_HISTORY[ownerId] || {})[weekStartStr];
+  const todayIdx = plansWeekOffset === 0 ? israelWeekday() : -1;
 
-  const todayIdx = planWeekOffset === 0 ? israelWeekday() : -1;
-
-  if (planEditing) {
+  if (plansEditing) {
     const source = days || new Array(7).fill("");
-    el.innerHTML = source.map((text, i) => {
-      const d = pw.day(i);
-      const esc = (text || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-      return `<div class="plan-row${i === todayIdx ? " today" : ""}">
+    el.innerHTML = source.map((text, i) => `<div class="plan-row${i === todayIdx ? " today" : ""}">
         <div class="plan-day">${WEEKDAY_EN[i]}</div>
-        <div class="plan-date">${fmtDateEn(d)}</div>
-        <input type="text" class="plan-edit-input" data-day="${i}" value="${esc}" placeholder="Rest">
-      </div>`;
-    }).join("") + `
+        <div class="plan-date">${fmtDateEn(pw.day(i))}</div>
+        <input type="text" class="plan-edit-input" data-day="${i}" value="${esc(text || "")}" placeholder="Rest" aria-label="${WEEKDAY_EN[i]} ${esc(fmtDateEn(pw.day(i)))}">
+      </div>`).join("") + `
       <div class="plan-edit-actions">
         <button id="planSaveBtn" class="week-nav-btn" type="button">Save</button>
         <span id="planSaveStatus" style="font-size:12px; color:var(--text-muted);"></span>
@@ -1274,9 +1227,10 @@ function renderPlan() {
       const texts = [...el.querySelectorAll(".plan-edit-input")].map(inp => inp.value.trim());
       status.textContent = "Saving…";
       try {
-        await savePlanWeek(selectedRunnerId, weekStartStr, texts);
-        planEditing = false;
+        await savePlanWeek(ownerId, weekStartStr, texts);
+        plansEditing = false;
         renderPlan();
+        document.getElementById("planEditBtn")?.focus();
       } catch {
         status.textContent = "Save failed — try again";
       }
@@ -1285,19 +1239,14 @@ function renderPlan() {
   }
 
   if (!days) {
-    el.innerHTML = `<div class="empty-note">No plan saved for this week${isCoach() ? " — click Edit to add one" : ""}</div>`;
+    el.innerHTML = `<div class="empty-note">No plan saved for this week — tap Edit to add one</div>`;
     return;
   }
-  el.innerHTML = days.map((text, i) => {
-    const d = pw.day(i);
-    const isToday = i === todayIdx;
-    const isRest = /מנוחה|rest/i.test(text || "");
-    return `<div class="plan-row${isToday ? " today" : ""}${isRest ? " plan-rest" : ""}">
+  el.innerHTML = days.map((text, i) => `<div class="plan-row${i === todayIdx ? " today" : ""}${isRestText(text) ? " plan-rest" : ""}"${i === todayIdx ? ` aria-current="date"` : ""}>
       <div class="plan-day">${WEEKDAY_EN[i]}</div>
-      <div class="plan-date">${fmtDateEn(d)}</div>
+      <div class="plan-date">${fmtDateEn(pw.day(i))}</div>
       <div class="plan-text">${esc(text) || "—"}</div>
-    </div>`;
-  }).join("");
+    </div>`).join("");
 }
 
 // Upserts a full 7-day week for one runner into Supabase's plan_history table, using the
@@ -1337,11 +1286,9 @@ function renderSharedWorkoutTool(el, pw) {
     </div>
     <div class="plan-edit-actions">
       <button id="sharedWorkoutApply" class="week-nav-btn" type="button">Apply</button>
-      <button id="sharedWorkoutClose" class="week-nav-btn" type="button">Close</button>
       <span id="sharedWorkoutStatus" style="font-size:12px; color:var(--text-muted);"></span>
     </div>`;
 
-  document.getElementById("sharedWorkoutClose").addEventListener("click", () => { sharedWorkoutOpen = false; renderPlan(); });
   document.getElementById("sharedWorkoutApply").addEventListener("click", async () => {
     const status = document.getElementById("sharedWorkoutStatus");
     const weekday = +document.getElementById("sharedWorkoutDay").value;
@@ -1372,63 +1319,15 @@ async function saveSharedWorkout(weekStartStr, weekday, text, ownerIds) {
   notifyPush({ type: "plan", ownerIds });
 }
 
-// Steps for each day of the viewed week: one runner's own count when a name is picked, otherwise the average over
-// the runners who have a count that day (some runners' Garmin wellness data never reaches Intervals.icu).
+// Short step count for chart labels: 12k, 8.4k, 950.
 const fmtSteps = v => v >= 10000 ? Math.round(v / 1000) + "k" : v >= 1000 ? (v / 1000).toFixed(1).replace(/.0$/, "") + "k" : String(Math.round(v));
-function renderSteps() {
-  const { start } = weekBounds();
-  const days = [...Array(7).keys()].map(i => new Date(start.getTime() + i * DAY));
-  const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const todayStr = ymd(new Date());
-  const mine = STEPS.filter(r => selectedRunnerId === null || r.ownerId === selectedRunnerId);
-  const perDay = days.map(d => {
-    const rows = mine.filter(r => r.date === ymd(d));
-    return { d, n: rows.length, avg: rows.length ? rows.reduce((t, r) => t + r.steps, 0) / rows.length : 0, today: ymd(d) === todayStr };
-  });
-  const dayKeys = new Set(days.map(ymd));
-  const tracked = new Set(mine.filter(r => dayKeys.has(r.date)).map(r => r.ownerId)).size;
-  document.getElementById("stepsSub").textContent =
-    `${fmtDateEn(days[0])} – ${fmtDateEn(days[6])}` + (weekOffset === 0 ? " (this week)" : "") +
-    (selectedRunnerId !== null ? " · " + runnerById(selectedRunnerId).name : tracked ? ` · average of ${tracked} runner${tracked > 1 ? "s" : ""}` : "");
-  const el = document.getElementById("stepsChart");
-  if (!perDay.some(p => p.n)) {
-    el.innerHTML = `<div class="empty-note">${STEPS.length ? "No step counts for this week" : "Step counts will show up here after the next sync"}</div>`;
-    return;
-  }
-
-  const W = 480, H = 250, m = { t: 22, r: 14, b: 36, l: 38 };
-  const niceMax = Math.ceil((Math.max(...perDay.map(p => p.avg)) || 1) / 4 / 2500) * 2500 * 4 || 10000;
-  const bw = (W - m.l - m.r) / 7;
-  const y = v => H - m.b - v / niceMax * (H - m.t - m.b);
-  const ink = getComputedStyle(document.documentElement);
-  const muted = ink.getPropertyValue("--text-muted").trim(), secondary = ink.getPropertyValue("--text-secondary").trim();
-  const grid = ink.getPropertyValue("--grid").trim(), baseline = ink.getPropertyValue("--baseline").trim(), accent = ink.getPropertyValue("--accent").trim();
-  let g = "";
-  for (let i = 0; i <= 4; i++) {
-    const v = niceMax * i / 4;
-    g += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="${v === 0 ? baseline : grid}" stroke-width="1"/>` +
-         `<text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end" font-size="10" fill="${muted}">${fmtSteps(v)}</text>`;
-  }
-  perDay.forEach((p, i) => {
-    const bx = m.l + i * bw, top = y(p.avg), cx = bx + bw / 2;
-    g += `<rect data-day="${i}" x="${bx + 4}" y="${top}" width="${Math.max(bw - 8, 2)}" height="${Math.max((H - m.b) - top, 0)}" rx="4" fill="${accent}" opacity="${p.today ? 0.4 : 1}"/>`;
-    if (p.n) g += `<text x="${cx}" y="${top - 6}" text-anchor="middle" font-size="10" fill="${secondary}">${fmtSteps(p.avg)}</text>`;
-    g += `<text x="${cx}" y="${H - 22}" text-anchor="middle" font-size="11" fill="${muted}">${WEEKDAY_EN[i]}</text>` +
-         `<text x="${cx}" y="${H - 8}" text-anchor="middle" font-size="10" fill="${muted}">${fmtDateEn(p.d)}</text>`;
-  });
-  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${g}</svg>`;
-  el.querySelectorAll("rect[data-day]").forEach(rect => {
-    const p = perDay[+rect.dataset.day];
-    rect.addEventListener("mousemove", e => showTip(
-      `<div class="t-title">${WEEKDAY_EN[+rect.dataset.day]} · ${fmtDateEn(p.d)}${p.today ? " (so far)" : ""}</div>
-       <div class="t-row">${selectedRunnerId === null ? "Average steps" : "Steps"}<b>${Math.round(p.avg).toLocaleString("en-US")}</b></div>
-       ${selectedRunnerId === null ? `<div class="t-row">Runners counted<b>${p.n}</b></div>` : ""}`, e.clientX, e.clientY));
-    rect.addEventListener("mouseleave", hideTip);
-  });
-}
-
 // Everything that follows the viewed week.
-function refreshWeekViews() { renderWeekNav(); renderTiles(); renderBars(); renderSteps(); renderHighlights(); }
+function refreshWeekViews() { renderWeekNav(); renderBars(); renderHighlights(); updateWeekNavRow(); }
+// The week navigator only drives the weekly highlight and the runner-by-runner km chart: hide it when neither shows.
+function updateWeekNavRow() {
+  const shown = id => document.getElementById(id).style.display !== "none";
+  document.getElementById("weekNavRow").style.display = shown("barCard") || shown("highlightCard") ? "flex" : "none";
+}
 
 function renderFeed() {
   // For a single runner, "Recent activities" shows their full history in growing weekly
@@ -1751,10 +1650,10 @@ function renderGroupSessions() {
   if (selectedRunnerId !== null) sessions = sessions.filter(s => s.runnerIds.has(selectedRunnerId));
   if (!sessions.length) { card.style.display = "none"; return; }
   card.style.display = "";
-  // A session from today is the news, so it goes right under the highlight. An older one belongs with
-  // the other history, below the graphs.
+  // A session from today is the news, so it goes right under the highlight. An older one goes below the
+  // km-per-runner chart, above the races.
   const todayStr = new Date(wallMs(new Date())).toISOString().slice(0, 10);
-  const anchor = document.getElementById(PD.activityYMD(sessions[0].start) === todayStr ? "tiles" : "planCard");
+  const anchor = document.getElementById(PD.activityYMD(sessions[0].start) === todayStr ? "cardsRow" : "racesCard");
   if (card.nextElementSibling !== anchor) anchor.parentNode.insertBefore(card, anchor);
   const hidden = groupCardHidden();
   document.getElementById("groupToggle").textContent = hidden ? "Show" : "Hide";
@@ -1887,17 +1786,9 @@ function renderProfileLink() {
   el.innerHTML = r ? `<button class="week-nav-btn" type="button" data-profile="${esc(r.id)}">👤 ${esc(r.name)}'s profile</button>` : "";
 }
 
-/* ---------- Home top: Today, five-week mileage, latest group session (linked runners see their own) ---------- */
-// Always the logged-in runner's own plan and runs for the current Israel calendar day, whichever runner or week the
-// page below is browsing: none of this reads or changes selectedRunnerId, weekOffset or planWeekOffset.
+/* ---------- Home top: latest group session, when the data was last checked; profile helpers ---------- */
 const myRunner = () => (MY_RUNNER_ID && runnerById(MY_RUNNER_ID)) ? MY_RUNNER_ID : null;
 const isRestText = t => /מנוחה|rest/i.test(t || "");
-// The plan text for one runner on one Israel calendar day: null = no plan saved for that week, "" = nothing that day.
-function planTextOn(ownerId, ymd) {
-  const week = (PLAN_HISTORY[ownerId] || {})[PD.planWeekKey(PD.sundayOf(ymd))];
-  if (!week) return null;
-  return String(week[PD.weekdayOf(ymd)] ?? "").trim();
-}
 function agoText(ms) {
   const min = Math.max(0, Math.round((Date.now() - ms) / 60000));
   if (min < 2) return "just now";
@@ -1918,85 +1809,14 @@ const fmtDayEn = ymd => PD.labelDate(ymd).toLocaleDateString("en-US", { weekday:
 function renderHome() {
   const me = myRunner();
   document.getElementById("myProfileBtn").style.display = me ? "" : "none";
+  document.getElementById("plansBtn").style.display = getSession()?.access_token && isCoach() ? "" : "none";
   document.querySelector(".hero").classList.toggle("compact", !!getSession()?.access_token);
-  renderTodayCard(me);
-  renderMileage(me);
   renderGroupLine();
   const fresh = document.getElementById("groupFresh");
-  fresh.hidden = !!me || !(GROUP_CHECKED > 0);
+  fresh.hidden = !(GROUP_CHECKED > 0);
   fresh.innerHTML = fresh.hidden ? "" : freshHtml(GROUP_CHECKED, "Checked Intervals.icu for at least one runner");
 }
 
-function renderTodayCard(me) {
-  const card = document.getElementById("todayCard");
-  card.hidden = !me;
-  if (!me) { card.innerHTML = ""; return; }
-  const today = PD.israelYMD(TODAY);
-  const t = planTextOn(me, today);
-  let main, cls = "", next = "";
-  if (t) { main = isRestText(t) ? "Rest day" : t; cls = isRestText(t) ? " muted" : ""; }
-  else {
-    // Nothing for today: the next day within two weeks that has a workout (rest days don't count as "next").
-    for (let i = 1; i <= 14; i++) {
-      const d = PD.addDays(today, i), n = planTextOn(me, d);
-      if (n && !isRestText(n)) { next = `Next · ${fmtDayEn(d)}`; main = n; break; }
-    }
-    if (!next) { main = "No workout scheduled"; cls = " muted"; }
-  }
-  card.innerHTML = `<div class="today-head"><h2>Today</h2><span class="today-when">${fmtDayEn(today)}</span></div>
-    ${next ? `<div class="today-next">Nothing planned today · ${esc(next)}</div>` : ""}
-    <div class="today-main${cls}">${esc(main)}</div>
-    <div class="today-foot"><button type="button" class="btn-primary" id="viewPlanBtn">View plan</button>${freshHtml(RUNNER_CHECKED[me], "Checked Intervals.icu")}</div>`;
-}
-
-let mileageSel = 4; // which of the five bars the readout describes (4 = this week)
-function mileageWeeks(me) {
-  const cur = PD.sundayOf(PD.israelYMD(TODAY)), checked = RUNNER_CHECKED[me];
-  const checkedDay = checked > 0 ? PD.israelYMD(checked) : null;
-  const weeks = [];
-  for (let i = -4; i <= 0; i++) {
-    const sunday = PD.addDays(cur, i * 7), nextSunday = PD.addDays(sunday, 7);
-    const runs = ACTIVITIES.filter(a => a.ownerId === me && a.distanceInMeters > 0).filter(a => {
-      const d = PD.activityYMD(a.startTimeInSeconds); // stored as local wall-clock time, see plan-dates.js
-      return d >= sunday && d < nextSunday;
-    });
-    // A week is a confirmed number only if the sync read this runner after the week ended (this week: read since it
-    // began, so it's "so far"); otherwise its total could be missing runs, so it shows as unavailable, never as a low number or 0.
-    const known = !!checkedDay && checkedDay >= (i === 0 ? sunday : nextSunday);
-    weeks.push({ sunday, current: i === 0, known, km: runs.reduce((t, a) => t + km(a), 0), runs: runs.length });
-  }
-  return weeks;
-}
-function renderMileage(me) {
-  const card = document.getElementById("mileageCard");
-  card.hidden = !me;
-  if (!me) return;
-  const weeks = mileageWeeks(me);
-  const top = Math.max(10, Math.ceil(Math.max(...weeks.filter(w => w.known).map(w => w.km), 0) / 10) * 10); // one scale from 0, rounded up to 10 km
-  const label = w => w.current ? "This week" : fmtDateEn(PD.labelDate(w.sunday));
-  const range = w => `${fmtDateEn(PD.labelDate(w.sunday))} – ${fmtDateEn(PD.labelDate(PD.addDays(w.sunday, 6)))}`;
-  const say = w => !w.known ? `${range(w)}: no data, the last sync didn't cover this week`
-    : `${range(w)}${w.current ? " (so far)" : ""}: ${fmtKm(w.km)} km in ${w.runs} run${w.runs === 1 ? "" : "s"}`;
-  document.getElementById("mileageChart").innerHTML = `<div class="mi-scale" aria-hidden="true"><span>${top} km</span></div>` + weeks.map((w, i) =>
-    `<button type="button" class="mi-bar${w.current ? " current" : ""}${w.known ? "" : " na"}" data-mi="${i}" aria-pressed="${i === mileageSel}" aria-label="${esc(say(w))}">
-      <span class="mi-track">${w.known ? `<span class="mi-fill" style="height:${(w.km / top * 100).toFixed(1)}%"></span>` : "–"}</span>
-      <span class="mi-lab">${esc(label(w))}</span></button>`).join("");
-  const w = weeks[mileageSel];
-  document.getElementById("mileageReadout").innerHTML = !w.known ? esc(say(w))
-    : `${esc(range(w))}${w.current ? " · so far" : ""} · <b>${fmtKm(w.km)} km</b> · ${w.runs} run${w.runs === 1 ? "" : "s"}`;
-}
-function selectMileageBar(e) {
-  const b = e.target.closest("[data-mi]");
-  if (!b || (e.type === "focusin" && +b.dataset.mi === mileageSel)) return;
-  mileageSel = +b.dataset.mi;
-  renderMileage(myRunner());
-  document.querySelector(`#mileageChart [data-mi="${mileageSel}"]`)?.focus();
-}
-document.getElementById("mileageChart").addEventListener("click", selectMileageBar);
-document.getElementById("mileageChart").addEventListener("focusin", selectMileageBar);
-
-// Same runner filter as the Group sessions card (renderGroupSessions), so the session the line names is always the
-// first one in that card: the newest overall on "All", the selected runner's newest otherwise, no line if they have none.
 function renderGroupLine() {
   const el = document.getElementById("groupLine");
   const r = selectedRunnerId !== null ? runnerById(selectedRunnerId) : null;
@@ -2019,37 +1839,7 @@ document.getElementById("groupLine").addEventListener("click", e => {
 });
 document.getElementById("myProfileBtn").addEventListener("click", e => { const me = myRunner(); if (me) { focusBeforeSheet = e.currentTarget; openProfile(me); } });
 
-// Read-only plan for the logged-in runner, in the side panel, with its own week navigation.
-let myPlanOffset = 0;
-function openMyPlan(opener) {
-  const me = myRunner(); if (!me) return;
-  if (opener) { focusBeforeSheet = opener; myPlanOffset = 0; }
-  const pw = planWeek(myPlanOffset), days = (PLAN_HISTORY[me] || {})[pw.key];
-  const todayIdx = myPlanOffset === 0 ? israelWeekday() : -1;
-  const rows = !days ? `<div class="empty-note">No plan saved for this week</div>` : days.map((text, i) => {
-    const rest = isRestText(text);
-    return `<div class="plan-row${i === todayIdx ? " today" : ""}${rest ? " plan-rest" : ""}"${i === todayIdx ? ` aria-current="date"` : ""}>
-      <div class="plan-day">${WEEKDAY_EN[i]}</div><div class="plan-date">${fmtDateEn(pw.day(i))}</div><div class="plan-text">${esc(text) || "—"}</div></div>`;
-  }).join("");
-  const sheet = document.getElementById("sheet");
-  sheet.innerHTML = `<div class="sheet-head"><div><h3>My training plan</h3>
-      <div class="sheet-sub" style="margin-bottom:0">${fmtDateEn(pw.start)} – ${fmtDateEn(pw.end)}${myPlanOffset === 0 ? " (this week)" : ""}</div></div>
-      <button class="close-btn" id="closeSheet">Close ✕</button></div>
-    <div style="display:flex; gap:6px; margin:12px 0 8px; flex-wrap:wrap;">
-      <button id="myPlanPrev" class="week-nav-btn" type="button">‹ Previous week</button>
-      <button id="myPlanNext" class="week-nav-btn" type="button">Next week ›</button>
-      ${myPlanOffset !== 0 ? `<button id="myPlanToday" class="week-nav-btn" type="button">This week</button>` : ""}
-    </div>
-    <div>${rows}</div>`;
-  document.getElementById("overlay").style.display = "block";
-  if (opener) sheet.scrollTop = 0;
-  document.getElementById("closeSheet").addEventListener("click", closeDetail);
-  const step = (d, id) => { myPlanOffset = d === 0 ? 0 : myPlanOffset + d; openMyPlan(); document.getElementById(id)?.focus(); };
-  document.getElementById("myPlanPrev").addEventListener("click", () => step(-1, "myPlanPrev"));
-  document.getElementById("myPlanNext").addEventListener("click", () => step(1, "myPlanNext"));
-  document.getElementById("myPlanToday")?.addEventListener("click", () => step(0, "myPlanPrev"));
-}
-document.getElementById("todayCard").addEventListener("click", e => { const b = e.target.closest("#viewPlanBtn"); if (b) openMyPlan(b); });
+document.getElementById("plansBtn").addEventListener("click", e => openPlans(e.currentTarget));
 
 const rankWord = n => { const v = n % 100, suf = ["th", "st", "nd", "rd"]; return n + (suf[(v - 20) % 10] || suf[v] || suf[0]); };
 
@@ -2759,7 +2549,7 @@ document.body.addEventListener("click", e => {
 
 // A short "jump to" bar: the page is long, and only the sections that are showing get a button.
 function renderJumpNav() {
-  const targets = [["tiles", "This week"], ["groupCard", "Sessions"], ["planCard", "Plan"], ["racesCard", "Races"], ["feedCard", "Runs"]];
+  const targets = [["cardsRow", "This week"], ["groupCard", "Sessions"], ["racesCard", "Races"], ["feedCard", "Runs"]];
   document.getElementById("jumpNav").innerHTML = targets
     .filter(([id]) => { const el = document.getElementById(id); return el && getComputedStyle(el).display !== "none"; })
     .map(([id, label]) => `<button type="button" data-jump="${id}">${label}</button>`).join("");
@@ -2769,22 +2559,17 @@ document.getElementById("jumpNav").addEventListener("click", e => {
   if (b) document.getElementById(b.dataset.jump)?.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
-function renderAll() { renderHome(); renderRunnerFilters(); renderProfileLink(); renderWeekNav(); renderHighlights(); renderRaces(); renderGroupSessions(); renderTiles(); renderBars(); renderPlan(); renderSteps(); renderFeed(); renderJumpNav(); }
+function renderAll() { renderHome(); renderRunnerFilters(); renderProfileLink(); renderWeekNav(); renderHighlights(); renderRaces(); renderGroupSessions(); renderBars(); renderFeed(); updateWeekNavRow(); renderJumpNav(); }
 
 document.getElementById("runnerFilters").addEventListener("click", e => {
   const btn = e.target.closest("button[data-runner]");
   if (!btn) return;
   selectedRunnerId = btn.dataset.runner || null;
-  planWeekOffset = 0;
-  planEditing = false;
   feedWeeksLoaded = 1;
   feedAllShown = 14;
   renderAll();
 });
 
-document.getElementById("planEditBtn").addEventListener("click", () => { planEditing = !planEditing; renderPlan(); });
-document.getElementById("planPrev").addEventListener("click", () => { planWeekOffset--; planEditing = false; renderPlan(); });
-document.getElementById("planNext").addEventListener("click", () => { planWeekOffset++; planEditing = false; renderPlan(); });
 
 document.getElementById("weekPrev").addEventListener("click", () => {
   weekOffset--;
