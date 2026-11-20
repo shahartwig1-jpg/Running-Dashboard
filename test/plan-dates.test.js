@@ -38,6 +38,35 @@ test("israelYMD uses Israel's calendar day, not UTC's", () => {
   assert.equal(D.israelYMD(Date.parse("2026-07-15T20:30:00Z")), "2026-07-15");
 });
 
+// Production values are written by fetch-data.js on GitHub Actions (UTC). Run normalize() under TZ=UTC with
+// Intervals.icu-shaped activities and check which day and plan week the page puts them in.
+function normalizedDayInCI(raw) {
+  const script = `const { normalize } = require(${JSON.stringify(path.join(__dirname, "..", "fetch-data.js"))});
+    const D = require(${JSON.stringify(path.join(__dirname, "..", "plan-dates.js"))});
+    const a = normalize(${JSON.stringify(raw)}, "u1"); const day = D.activityYMD(a.startTimeInSeconds);
+    console.log(JSON.stringify([day, D.sundayOf(day)]));`;
+  return JSON.parse(execFileSync(process.execPath, ["-e", script], { env: { ...process.env, TZ: "UTC" } }).toString().trim());
+}
+
+test("a Saturday-night run stays in its own week (start_date_local, stored by CI)", () => {
+  // Sat 21 Nov 2026, 22:30 in Israel = 20:30Z. The week is Sun 15 - Sat 21 Nov.
+  const sat = { id: "i1", type: "Run", start_date_local: "2026-11-21T22:30:00", start_date: "2026-11-21T20:30:00Z", distance: 10000, moving_time: 3000 };
+  assert.deepEqual(normalizedDayInCI(sat), ["2026-11-21", "2026-11-15"]);
+  // Sun 22 Nov, 00:30 in Israel = Sat 22:30Z: belongs to the NEXT week.
+  const sun = { id: "i2", type: "Run", start_date_local: "2026-11-22T00:30:00", start_date: "2026-11-21T22:30:00Z", distance: 10000, moving_time: 3000 };
+  assert.deepEqual(normalizedDayInCI(sun), ["2026-11-22", "2026-11-22"]);
+  // Summer time (UTC+3): Sat 25 Jul 2026, 23:45 local.
+  const summer = { id: "i3", type: "Run", start_date_local: "2026-07-25T23:45:00", start_date: "2026-07-25T20:45:00Z", distance: 5000, moving_time: 1500 };
+  assert.deepEqual(normalizedDayInCI(summer), ["2026-07-25", "2026-07-19"]);
+});
+
+test("documented fallback: without start_date_local the day is the UTC date (a day early only after local midnight)", () => {
+  const evening = { id: "i4", type: "Run", start_date: "2026-11-21T20:30:00Z", distance: 10000, moving_time: 3000 }; // Sat 22:30 Israel
+  assert.deepEqual(normalizedDayInCI(evening), ["2026-11-21", "2026-11-15"]);
+  const afterMidnight = { id: "i5", type: "Run", start_date: "2026-11-21T22:30:00Z", distance: 10000, moving_time: 3000 }; // Sun 00:30 Israel
+  assert.deepEqual(normalizedDayInCI(afterMidnight), ["2026-11-21", "2026-11-15"]); // known limitation: counted on Saturday
+});
+
 test("same results whatever time zone the device is set to", () => {
   const script = `const D=require(${JSON.stringify(path.join(__dirname, "..", "plan-dates.js"))});
     console.log(JSON.stringify([D.israelYMD(new Date("2026-11-20T22:30:00Z")), D.planWeekKey(D.sundayOf(D.israelYMD(new Date("2026-11-20T22:30:00Z")))), D.addDays("2026-10-18", 7), D.labelDate("2026-10-25").getDate()]))`;

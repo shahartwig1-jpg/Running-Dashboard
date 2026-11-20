@@ -37,7 +37,17 @@
   // A Date at local noon on that calendar day, only for formatting labels (noon stays on the same day in any zone the group uses).
   const labelDate = ymd => { const [y, m, d] = parts(ymd); return new Date(y, m - 1, d, 12); };
 
-  const api = { TZ, israelYMD, addDays, weekdayOf, sundayOf, planWeekKey, labelDate };
+  // The calendar day an activity happened on, from its stored startTimeInSeconds.
+  // fetch-data.js parses Intervals.icu's start_date_local (the watch's wall-clock time, no offset) on GitHub Actions,
+  // which runs in UTC, so the stored value is the LOCAL time written as if it were UTC: Saturday 22:30 in Israel is
+  // stored as Saturday 22:30Z. Its UTC date is therefore the runner's own local date; converting it to Israel time
+  // would wrongly move late-evening runs into the next day (and Saturday-night runs into the next week).
+  // Fallback: an activity with no start_date_local is stored from start_date (real UTC), so its day is the UTC date,
+  // which is a day early only for runs between midnight and 02:00/03:00 Israel time. Running fetch-data.js on a
+  // computer set to Israel time (not CI) stores real UTC instead; production data comes from CI.
+  const activityYMD = startTimeInSeconds => new Date(startTimeInSeconds * 1000).toISOString().slice(0, 10);
+
+  const api = { TZ, israelYMD, addDays, weekdayOf, sundayOf, planWeekKey, labelDate, activityYMD };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.PlanDates = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
