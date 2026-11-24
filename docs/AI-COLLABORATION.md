@@ -127,3 +127,22 @@ The missing upstream activities are a separate unresolved cause if the affected 
 Shahar provided an official Intervals.icu email confirming that his shared API key was used for three coached/followed athletes in the last day. Upcoming enforcement will restrict API access to athletes who explicitly select Your coaches or Your followers in Settings → Apps → Who can access your data using apps. Unauthorized calls will return HTTP 403, and GET /api/v1/athletes will list accessible athletes. Own-data access is unaffected. Official reference: https://forum.intervals.icu/t/let-your-coaches-or-followers-apps-access-your-data/133622
 
 Shahar has a Hebrew message asking the athletes to enable the appropriate setting and verify Garmin activity download. The three athletes mentioned in the email may overlap with the three runners without recent activity, but this is unconfirmed. Your previous diagnosis found no 403s and missing activities upstream, so the email alone does not establish causation. Please recheck accessible athletes and per-athlete sync results after they confirm the settings, and report whether missing workouts arrive. Ensure the existing per-athlete 403 handling preserves roster and previously fetched data; report any gaps before proposing code changes. Keep the chart visibility fix independent of the upstream diagnosis.
+
+### 2026-11-24 · Claude · API permission check and 403 handling · Waiting for athletes / Shahar
+
+Read-only, nothing changed.
+
+**Accessible athletes now:** `GET /api/v1/athletes` with the shared key returns 200 and lists **all 8** athletes on that key (the ninth runner uses his own key). Enforcement isn't affecting us yet. I'll recheck after the runners confirm the setting.
+
+**403 handling in `fetch-data.js` (verified in code):**
+- Each athlete is processed in its own `try`. The first call is the activity list. If it returns 403, everything else for that athlete is skipped (activities, the deleted-run check, wellness, settings), and the error is logged as `FAILED`.
+- **The roster row is preserved.** `runners` is only ever upserted (`merge-duplicates`), never deleted. A failed athlete is simply not upserted that run.
+- **Previously fetched data is preserved.** No delete or hide runs for that athlete, because the deleted-run check is inside the same `try` after the successful list call. Laps/routes are only fetched for activities that were read.
+- **Honest freshness.** The athlete's newest `fetchedAt` stops advancing, so the profile shows "Checked … ago · may be out of date", and weeks after it show "no data" rather than 0.
+- The sync fails as a whole only when **no** athlete returns activities (`process.exit(1)`), so nothing gets wiped either way.
+
+**Gaps (no code change proposed yet, decision for Shahar):**
+1. **Silent partial failure.** If some athletes start returning 403, the workflow still reports success. Only the profile label would show it. Possible fix: end the sync with a one-line summary, and fail or annotate the run when any athlete failed, so it's visible in GitHub Actions.
+2. **Edge case in the deleted-run check.** If the list call works but a per-activity lookup returns 403, a run missing from the list would be **hidden** rather than kept, because any non-404 counts as "still exists" and list-misses are hidden. It's pre-existing and unlikely. It could treat 401/403 as "unknown, leave untouched".
+
+The chart-visibility branch (zero-km runners) is waiting for Shahar's go-ahead to build. It stays independent of this.
