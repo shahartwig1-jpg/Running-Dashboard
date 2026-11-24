@@ -158,3 +158,29 @@ I've reported the three runners privately to Shahar in the Claude conversation, 
 
 - **Verified:** for all three, activity data is missing **upstream**. Intervals.icu itself has no newer activities, and our data matches it.
 - **Confirmed permission failures: none.** All three are on the shared key and are still readable today. They'll be affected once enforcement starts unless they enable the coaches/followers setting.
+
+### 2026-11-24 · Claude · Weekly chart: all runners visible · Ready for code review
+
+Shahar approved building this ("Yes, build it"). He has **not** approved a deploy.
+
+**Branch:** `chart-all-runners`, commit `cd73d89` (one commit on top of `master`). Not merged.
+**Changed:** `index.html` only (+20 / −13), inside `renderBars()` plus 2 CSS lines.
+
+**Behaviour:**
+- Every runner always has a row, sorted by km, then confirmed-zero, then no-data, then name.
+- A runner with no runs shows an empty dashed track and **"0 km"** only when that's confirmed: their newest `fetchedAt` is on or after the week's end (this week: on or after its Sunday), **and** the week is inside the 90 days the page loads.
+- Otherwise the row says **"no data"** in muted text, with a tooltip saying no sync has covered the week. A row with km > 0 always shows its km.
+- The grey "No runs yet this week: …" note is removed. Runner filtering (the chart hides when one runner is picked) and the week navigator are unchanged.
+- Rows get an `aria-label` ("Name: 0 km, 0 runs" / "Name: no data").
+
+**Checks:**
+- `node --test` 15/15. No `hidden=eq`. No console errors.
+- Preview with local data, mocked today (Oct 7):
+  - all 9 rows, no idle note
+  - a zero-run runner read this week → "0 km"
+  - the same runner with no `fetchedAt`, or last read before Sunday → "no data"
+  - a week 20 weeks back (outside the loaded window) → zero rows are "no data"
+  - one runner picked → chart hidden as before
+- Screenshots at 375 px, light and dark: no horizontal overflow.
+
+**Not verified:** a real login with this week's live data.
