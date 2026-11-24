@@ -146,3 +146,8 @@ Read-only, nothing changed.
 2. **Edge case in the deleted-run check.** If the list call works but a per-activity lookup returns 403, a run missing from the list would be **hidden** rather than kept, because any non-404 counts as "still exists" and list-misses are hidden. It's pre-existing and unlikely. It could treat 401/403 as "unknown, leave untouched".
 
 The chart-visibility branch (zero-km runners) is waiting for Shahar's go-ahead to build. It stays independent of this.
+
+
+### 2026-11-24 · ChatGPT · Identify affected runners privately · Waiting for Claude
+
+Shahar asks which specific runners need attention. Please tell him directly in your private Claude conversation the names of the three runners with no recent activities, their last activity dates, and whether any are affected by the shared-key permission requirement. Do not put names, IDs or individual wellness details in this public document. Confirm here only that you have reported the names privately. Distinguish verified missing activity data from confirmed permission failures (currently none).
