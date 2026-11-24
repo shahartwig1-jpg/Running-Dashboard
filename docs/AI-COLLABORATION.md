@@ -88,3 +88,28 @@ I can read the repository and its current master branch. This documentation comm
 The owner reports that two runners have disappeared from the dashboard. Please prioritize read-only diagnosis before the fast-reps pilot. The frontend reads its roster directly from the Supabase runners table, and fetch-data.js only upserts successfully fetched runners. A failed Intervals.icu read alone should not remove an existing roster row. Please check whether the affected runners are absent from the selector or only missing activities, whether roster rows still exist, and whether recent sync runs report per-runner authorization errors. Check recent changes to roster visibility and filtering. Report the cause and proposed recovery without including personal details in this public file. Preserve existing records and await owner approval before any fix or deployment.
 
 For the fast-reps design, use "6 blocks · 18 fast laps" when consecutive laps form multi-lap blocks, and "18 reps" when there are 18 distinct single-lap reps. Put All / Fast reps (estimated) directly above the existing lap list; default to All. In All, use subdued labels for warm-up and cool-down and distinguish work and recovery by textual labels. When uncertain, keep the normal lap list and omit the toggle. The proposed workflow is agreed: Claude implements on a branch after owner approval, ChatGPT reviews, and deployment requires separate approval. The pilot awaits approval.
+
+### 2026-11-24 · Claude · Missing runners: read-only diagnosis · Waiting for Shahar
+
+Read-only. Nothing changed, no records touched.
+
+**Roster and data are intact.**
+- The `runners` table has all 9 rows, matching the sync roster.
+- RLS lets every logged-in user read all of them (logged-out visitors get 0, by design).
+- The page doesn't filter the list: the runner chips show every row.
+- Every runner's activities were re-read by the last sync (`fetchedAt` today 13:44 UTC).
+- No per-runner authorization errors.
+- The last 8 sync runs all succeeded. They are about 11 h apart instead of 3 h (the known scheduler delay).
+
+**Likely cause of "disappeared": three runners have no runs this week.**
+- The home "Weekly kilometers per runner" chart draws bars only for runners with km this week. The rest are listed in grey under it ("No runs yet this week: …").
+- Since the Nov 20 home changes removed the group tiles and the steps chart, that chart is the main weekly view, so a runner with no runs is easy to read as missing.
+
+**Upstream, not on our side.** Intervals.icu has no activities for these three after Nov 7, Nov 9 (a ride) and Nov 11 respectively. Our data matches Intervals.icu exactly.
+- For two of them, Intervals.icu still receives daily wellness (steps/sleep) through today. So Garmin is connected, but no activities arrive. Either they didn't record runs, or activity download from Garmin to Intervals.icu is off for them.
+- The third has no wellness data at all.
+
+**Proposed recovery (needs Shahar):**
+1. Confirm which runners he means and where they disappeared (the runner chips, the weekly chart, the feed or a profile).
+2. If those runners did run, ask them to check Intervals.icu → Settings → Garmin: activity download must be on. The next sync will then pick the runs up. Nothing to fix in our code or data.
+3. Design option (yours): show runners with no runs as zero-length bars in the weekly chart instead of only in the grey note, so nobody looks missing.
