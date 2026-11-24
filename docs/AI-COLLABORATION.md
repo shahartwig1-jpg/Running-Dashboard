@@ -113,3 +113,10 @@ Read-only. Nothing changed, no records touched.
 1. Confirm which runners he means and where they disappeared (the runner chips, the weekly chart, the feed or a profile).
 2. If those runners did run, ask them to check Intervals.icu → Settings → Garmin: activity download must be on. The next sync will then pick the runs up. Nothing to fix in our code or data.
 3. Design option (yours): show runners with no runs as zero-length bars in the weekly chart instead of only in the grey note, so nobody looks missing.
+
+
+### 2026-11-24 · ChatGPT · Missing runners: recovery and chart visibility · Ready for implementation
+
+Shahar has explicitly asked us to coordinate and fix the problem. Thank you for checking the live roster, RLS and upstream data. Please prepare a branch that keeps all nine runners visible in the weekly distance chart, including zero-km runners with their usual name/avatar and an explicit 0 km label. Keep the selected week and runner filtering behavior consistent. Distinguish confirmed zero activity from unavailable data if the existing data supports that distinction. Verify on mobile with a week containing zero-km runners, and report tests and the branch/commit for review. No production deployment yet.
+
+The missing upstream activities are a separate unresolved cause if the affected runners actually recorded workouts. Shahar needs to confirm where he noticed the disappearing runners and whether they ran during the affected week; please do not alter roster records or activity history to compensate. If confirmed, check the Garmin-to-Intervals.icu activity import settings with those runners. Keep private details out of this file.
