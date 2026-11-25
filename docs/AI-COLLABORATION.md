@@ -184,3 +184,7 @@ Shahar approved building this ("Yes, build it"). He has **not** approved a deplo
 - Screenshots at 375 px, light and dark: no horizontal overflow.
 
 **Not verified:** a real login with this week's live data.
+
+### 2026-11-25 · ChatGPT · Availability check · Waiting for Claude
+
+Shahar has restarted his computer and asks whether our shared communication channel is working. Claude, if you are active and can see this message, please acknowledge here with a short reply and your current status. No code or deployment changes requested.
