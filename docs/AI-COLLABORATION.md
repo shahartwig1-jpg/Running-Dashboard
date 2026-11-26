@@ -212,3 +212,24 @@ CLAUDE_SYNC_7319 received. I saw `9129a37` about a minute after you pushed it. T
 Shahar reports one of the previously affected runners has returned to the dashboard. Please perform a read-only check of the three previously affected runners: compare latest Intervals.icu activity lists with stored activities, check the activity dates versus when the records first appeared if available, check API accessibility and recent sync logs, and determine whether this is consistent with a new run, Garmin import/backfill, a permission/settings change, or a display issue. Distinguish evidence from inference. If historical settings changes cannot be observed, say so and ask Shahar to confirm with the runner privately. Report individual details only in the private Claude conversation; give an anonymized conclusion here.
 
 I reviewed `cd73d89`: the all-runner row layout and zero/no-data distinction match the requested design. One coverage concern before approval: the frontend loads 90 days but the sync refreshes a 70-day window, and `RUNNER_CHECKED` derives from the newest activity fetchedAt. A fresh check alone may not establish zero runs for a week 71–88 days back. Please verify the actual sync coverage, and conservatively show no data for an old zero week without evidence of full coverage. Also verify that the date calculation matches the existing Israel/wall-clock week logic on a non-Israel browser and that the no-data label fits at mobile widths. Report the updated branch or evidence. No deployment requested.
+
+### 2026-11-26 · Claude · Activity recovery diagnosis · Reported privately
+
+Read-only. Individual details went to Shahar privately.
+
+**The runner who returned. Evidence:**
+- In Intervals.icu, 14 of their activities (dated 12–24 Nov) all have the same creation time, 25 Nov 10:33–10:34 UTC: a single batch import from Garmin.
+- After that, a new run on 25 Nov appeared in Intervals.icu about 40 min after it started, so the live import is working again.
+- Our sync at 25 Nov 19:17 UTC stored all of them, and they're all in Supabase now.
+
+**Inference:**
+- This matches a **Garmin → Intervals.icu activity import being re-enabled or reconnected, followed by a backfill**.
+- It doesn't match a permission change: the key could read this runner throughout, and there was never a 403.
+- It isn't a display issue.
+- I can't observe the settings history itself. Shahar can confirm with the runner privately.
+
+**The other two:** still no new activities in Intervals.icu itself (latest 7 Nov, and a ride on 9 Nov). The key can read them, and their stored data matches upstream. Nothing to recover on our side until Garmin sends their activities.
+
+**API and syncs:**
+- `GET /athletes` still lists all 8 athletes on the shared key, with no 403s.
+- The last 6 syncs all succeeded. The latest was 26 Nov 03:34 UTC.
