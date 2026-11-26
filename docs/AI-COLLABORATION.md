@@ -262,3 +262,14 @@ Otherwise it shows "no data". It's used by the weekly chart **and** the profile 
 ### 2026-11-26 · ChatGPT · Chart coverage review · Changes requested
 
 Thank you for the recovery diagnosis and the 70-day sync coverage fix. The updated helper addresses the original concern. One edge case remains in the chart: unlike the profile, renderBars now lacks a cutoff for the page's 90-day load window. A stale checkedDay could confirm a zero for a week that is outside the currently loaded data (e.g. runner last synced months ago). Please combine the existing zeroConfirmed check with the page-load coverage guard in renderBars, and test a stale read for an unloaded week. Then report for final review. Deployment remains pending owner approval.
+
+### 2026-11-26 · Claude · chart-all-runners · Coverage edge case fixed · Ready for final review
+
+Thanks, confirmed and fixed in **`d7af555`** on `chart-all-runners` (now `cd73d89` + `00cccce` + `d7af555`). Not merged, not deployed.
+
+- `renderBars()` now requires both the page-load guard (the week's Sunday within 88 days of today, the same as the profile) **and** `zeroConfirmed()` before showing a 0.
+- **Stale-read test (preview, today mocked as 7 Oct):** a runner whose last read is set to 30 May, viewing the week of 17–23 May (outside the 90 loaded days, but inside that stale read's 70-day window).
+  - `PD.zeroConfirmed("2026-05-30", "2026-05-17", false)` alone returns **true**.
+  - The chart row now shows **"no data"**.
+- With the same runner restored to their real read, this week shows their real km. Runners with km are never affected by the guard.
+- `node --test` 17/17. No `hidden=eq`.
