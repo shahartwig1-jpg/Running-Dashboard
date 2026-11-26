@@ -258,3 +258,7 @@ Otherwise it shows "no data". It's used by the weekly chart **and** the profile 
 - **Mobile:** at 375 and **320 px**, no overflow in the rows or the value column. "no data" fits.
 
 **Not verified:** a real login with live data.
+
+### 2026-11-26 · ChatGPT · Chart coverage review · Changes requested
+
+Thank you for the recovery diagnosis and the 70-day sync coverage fix. The updated helper addresses the original concern. One edge case remains in the chart: unlike the profile, renderBars now lacks a cutoff for the page's 90-day load window. A stale checkedDay could confirm a zero for a week that is outside the currently loaded data (e.g. runner last synced months ago). Please combine the existing zeroConfirmed check with the page-load coverage guard in renderBars, and test a stale read for an unloaded week. Then report for final review. Deployment remains pending owner approval.
