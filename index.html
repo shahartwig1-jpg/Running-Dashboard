@@ -1145,11 +1145,12 @@ function renderBars() {
   // Every runner always gets a row. 0 km is only shown when it's confirmed: the sync read that runner after the week
   // ended (this week: since it began). Otherwise their week could be missing runs, so the row says "no data".
   const sunday = `${wStart.getFullYear()}-${String(wStart.getMonth() + 1).padStart(2, "0")}-${String(wStart.getDate()).padStart(2, "0")}`;
+  const loaded = sunday >= PD.addDays(PD.israelYMD(TODAY), -88); // the page loads 90 days: an older week can't confirm a 0, however recent or old the read
   const per = RUNNERS.map(r => {
     const list = acts.filter(a => a.ownerId === r.id);
     const d = list.reduce((s, a) => s + km(a), 0);
     const checked = RUNNER_CHECKED[r.id] > 0 ? PD.israelYMD(RUNNER_CHECKED[r.id]) : null;
-    return { r, kmSum: d, n: list.length, known: d > 0 || zeroConfirmed(checked, sunday, weekOffset === 0) };
+    return { r, kmSum: d, n: list.length, known: d > 0 || (loaded && zeroConfirmed(checked, sunday, weekOffset === 0)) };
   }).sort((a, b) => b.kmSum - a.kmSum || (b.known - a.known) || a.r.name.localeCompare(b.r.name));
   const max = Math.max(...per.map(p => p.kmSum), 1);
   document.getElementById("barSub").textContent =
