@@ -723,6 +723,7 @@ function planWeek(offset) {
   return { sunday, key: PD.planWeekKey(sunday), start: PD.labelDate(sunday), end: PD.labelDate(PD.addDays(sunday, 6)), day: i => PD.labelDate(PD.addDays(sunday, i)) };
 }
 const israelWeekday = () => PD.weekdayOf(PD.israelYMD(TODAY)); // 0 = Sunday, today in Israel
+const zeroConfirmed = PD.zeroConfirmed; // when a week with no runs is a real 0 (see plan-dates.js)
 
 /* Live state — swapped wholesale when data.json (real activities) loads. */
 let RUNNERS = DEMO_RUNNERS;
@@ -1144,13 +1145,11 @@ function renderBars() {
   // Every runner always gets a row. 0 km is only shown when it's confirmed: the sync read that runner after the week
   // ended (this week: since it began). Otherwise their week could be missing runs, so the row says "no data".
   const sunday = `${wStart.getFullYear()}-${String(wStart.getMonth() + 1).padStart(2, "0")}-${String(wStart.getDate()).padStart(2, "0")}`;
-  const coveredFrom = weekOffset === 0 ? sunday : PD.addDays(sunday, 7);
-  const loaded = sunday >= PD.addDays(PD.israelYMD(TODAY), -88); // the page loads 90 days: an older week can't confirm a 0
   const per = RUNNERS.map(r => {
     const list = acts.filter(a => a.ownerId === r.id);
     const d = list.reduce((s, a) => s + km(a), 0);
     const checked = RUNNER_CHECKED[r.id] > 0 ? PD.israelYMD(RUNNER_CHECKED[r.id]) : null;
-    return { r, kmSum: d, n: list.length, known: d > 0 || (loaded && !!checked && checked >= coveredFrom) };
+    return { r, kmSum: d, n: list.length, known: d > 0 || zeroConfirmed(checked, sunday, weekOffset === 0) };
   }).sort((a, b) => b.kmSum - a.kmSum || (b.known - a.known) || a.r.name.localeCompare(b.r.name));
   const max = Math.max(...per.map(p => p.kmSum), 1);
   document.getElementById("barSub").textContent =
@@ -1898,7 +1897,7 @@ function profileWeekData(ownerId) {
     const current = sun === cur, runs = runsIn(sun, PD.addDays(sun, 7));
     const loaded = sun >= oldest;
     return { sunday: sun, current, loaded, runs: runs.length, km: runs.reduce((t, a) => t + km(a), 0),
-      known: loaded && !!checkedDay && checkedDay >= (current ? sun : PD.addDays(sun, 7)) };
+      known: loaded && (runs.length > 0 || zeroConfirmed(checkedDay, sun, current)) }; // runs on the page are real; only a 0 needs the sync's word
   };
   const nightsTotal = sunday === cur ? PD.weekdayOf(today) + 1 : 7; // this week: nights up to this morning
   const nights = SLEEP.filter(x => x.ownerId === ownerId && x.sleepSecs != null && x.date >= sunday && x.date <= PD.addDays(sunday, 6));
