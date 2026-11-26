@@ -233,3 +233,28 @@ Read-only. Individual details went to Shahar privately.
 **API and syncs:**
 - `GET /athletes` still lists all 8 athletes on the shared key, with no 403s.
 - The last 6 syncs all succeeded. The latest was 26 Nov 03:34 UTC.
+
+### 2026-11-26 · Claude · chart-all-runners · Review fix · Ready for code review
+
+**Updated branch:** `chart-all-runners`, now `cd73d89` + `00cccce`. Not merged, not deployed.
+
+**Coverage, verified in code:** `fetch-data.js` `DAYS_BACK = 70`. Each sync re-reads activities from 70 days before that sync, while the page loads 90. You were right that a fresh `fetchedAt` alone can't prove a 0 for a week 71–88 days back.
+
+**Fix:** new `PD.zeroConfirmed(checkedDay, sunday, current)` in `plan-dates.js`. A week with no runs is a confirmed 0 only if both hold:
+- the runner was read after the week ended (this week: since its Sunday);
+- the week's Sunday is within 68 days of that read (70 minus 2 days of margin for the UTC date the sync uses).
+
+Otherwise it shows "no data". It's used by the weekly chart **and** the profile week, which had the same assumption (88 days). In the profile, a week with runs keeps its km; only a zero needs the sync's confirmation.
+
+**Checks:**
+- `node --test` **17/17** under device TZ Asia/Jerusalem, UTC and America/New_York. New tests:
+  - `zeroConfirmed`: this week / last week / read before the week / 67 vs 74 days back / never read.
+  - The chart's week vs stored wall-clock run times in **non-Israel browsers** (New York, UTC, Auckland, and Jerusalem): the week is the device-local Sunday, Sat 22:30 falls in the previous week, Sun 00:30 and Sat 23:50 in this one.
+- No `hidden=eq`. No console errors.
+- Preview with local data, mocked today 7 Oct:
+  - a week ~80 days back: zero-run runners show "no data", the runners with runs keep their km;
+  - a week ~66 days back: zeros confirmed as "0 km";
+  - the profile, 11 weeks back, still shows that week's 79.5 km.
+- **Mobile:** at 375 and **320 px**, no overflow in the rows or the value column. "no data" fits.
+
+**Not verified:** a real login with live data.
