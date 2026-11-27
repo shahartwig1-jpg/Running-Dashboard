@@ -468,6 +468,8 @@
   .feed-map { flex: 0 0 42%; height: 170px; margin: 0; }
   .feed-map, .feed-map * { pointer-events: none !important; }
   .idle-note { font-size: 12px; color: var(--text-muted); margin-top: 10px; }
+  .bar-track:empty { border-bottom: 1px dashed var(--grid); height: 9px; } /* a 0 km / no-data row keeps its place with an empty track */
+  .bar-row.no-data .bar-val, .bar-row.no-data .bar-name { color: var(--text-muted); }
   .rec-history { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 6px; }
   .rec-history-row { display: flex; align-items: baseline; gap: 12px; font-size: 12px; padding: 4px 6px; border-radius: 6px; cursor: pointer; font-variant-numeric: tabular-nums; }
   .rec-history-row:hover { background: var(--grid); }
@@ -721,6 +723,7 @@ function planWeek(offset) {
   return { sunday, key: PD.planWeekKey(sunday), start: PD.labelDate(sunday), end: PD.labelDate(PD.addDays(sunday, 6)), day: i => PD.labelDate(PD.addDays(sunday, i)) };
 }
 const israelWeekday = () => PD.weekdayOf(PD.israelYMD(TODAY)); // 0 = Sunday, today in Israel
+const zeroConfirmed = PD.zeroConfirmed; // when a week with no runs is a real 0 (see plan-dates.js)
 
 /* Live state — swapped wholesale when data.json (real activities) loads. */
 let RUNNERS = DEMO_RUNNERS;
@@ -1138,30 +1141,34 @@ function renderBars() {
   // The viewed calendar week (Sun -> Sat, see weekOffset), not the 7/30-day toggle —
   // same convention as "Weekly distance" and "Km per weekday", so all three agree.
   const acts = thisWeekActs();
+  const { start: wStart, end: wEnd } = weekBounds();
+  // Every runner always gets a row. 0 km is only shown when it's confirmed: the sync read that runner after the week
+  // ended (this week: since it began). Otherwise their week could be missing runs, so the row says "no data".
+  const sunday = `${wStart.getFullYear()}-${String(wStart.getMonth() + 1).padStart(2, "0")}-${String(wStart.getDate()).padStart(2, "0")}`;
+  const loaded = sunday >= PD.addDays(PD.israelYMD(TODAY), -88); // the page loads 90 days: an older week can't confirm a 0, however recent or old the read
   const per = RUNNERS.map(r => {
     const list = acts.filter(a => a.ownerId === r.id);
     const d = list.reduce((s, a) => s + km(a), 0);
-    return { r, kmSum: d, n: list.length };
-  }).sort((a, b) => b.kmSum - a.kmSum);
+    const checked = RUNNER_CHECKED[r.id] > 0 ? PD.israelYMD(RUNNER_CHECKED[r.id]) : null;
+    return { r, kmSum: d, n: list.length, known: d > 0 || (loaded && zeroConfirmed(checked, sunday, weekOffset === 0)) };
+  }).sort((a, b) => b.kmSum - a.kmSum || (b.known - a.known) || a.r.name.localeCompare(b.r.name));
   const max = Math.max(...per.map(p => p.kmSum), 1);
-  const { start: wStart, end: wEnd } = weekBounds();
   document.getElementById("barSub").textContent =
     `${fmtDateEn(wStart)} – ${fmtDateEn(wEnd)}` + (weekOffset === 0 ? " (this week)" : "");
   const el = document.getElementById("barChart");
-  const idle = per.filter(p => p.kmSum === 0);
-  const active = idle.length === per.length ? per : per.filter(p => p.kmSum > 0);
-  el.innerHTML = active.map(p => `
-    <div class="bar-row" data-id="${p.r.id}">
+  const valText = p => p.known ? `${fmtKm(p.kmSum)} km` : "no data";
+  el.innerHTML = per.map(p => `
+    <div class="bar-row${p.known ? "" : " no-data"}" data-id="${p.r.id}" aria-label="${esc(p.r.name)}: ${valText(p)}${p.known ? `, ${p.n} run${p.n === 1 ? "" : "s"}` : ""}">
       <div class="bar-name">${runnerAvatarHtml(p.r, "sm")}${esc(p.r.name)}</div>
-      <div class="bar-track"><div class="bar-fill" style="width:${(p.kmSum / max * 100).toFixed(1)}%;background:${colorOf(p.r)}"></div></div>
-      <div class="bar-val">${fmtKm(p.kmSum)} km</div>
-    </div>`).join("") + (active.length < per.length ? `<div class="idle-note">No runs yet this week: ${idle.map(p => esc(p.r.name)).join(", ")}</div>` : "");
+      <div class="bar-track">${p.kmSum > 0 ? `<div class="bar-fill" style="width:${(p.kmSum / max * 100).toFixed(1)}%;background:${colorOf(p.r)}"></div>` : ""}</div>
+      <div class="bar-val">${valText(p)}</div>
+    </div>`).join("");
   el.querySelectorAll(".bar-row").forEach(row => {
     const p = per.find(x => x.r.id === row.dataset.id);
     row.addEventListener("mousemove", e => showTip(
-      `<div class="t-title">${esc(p.r.name)}</div>
-       <div class="t-row">Runs<b>${p.n}</b></div>
-       <div class="t-row">Distance<b>${fmtKm(p.kmSum)} km</b></div>`, e.clientX, e.clientY));
+      `<div class="t-title">${esc(p.r.name)}</div>` + (p.known
+        ? `<div class="t-row">Runs<b>${p.n}</b></div><div class="t-row">Distance<b>${fmtKm(p.kmSum)} km</b></div>`
+        : `<div class="t-row">No sync has covered this week yet</div>`), e.clientX, e.clientY));
     row.addEventListener("mouseleave", hideTip);
   });
 }
@@ -1891,7 +1898,7 @@ function profileWeekData(ownerId) {
     const current = sun === cur, runs = runsIn(sun, PD.addDays(sun, 7));
     const loaded = sun >= oldest;
     return { sunday: sun, current, loaded, runs: runs.length, km: runs.reduce((t, a) => t + km(a), 0),
-      known: loaded && !!checkedDay && checkedDay >= (current ? sun : PD.addDays(sun, 7)) };
+      known: loaded && (runs.length > 0 || zeroConfirmed(checkedDay, sun, current)) }; // runs on the page are real; only a 0 needs the sync's word
   };
   const nightsTotal = sunday === cur ? PD.weekdayOf(today) + 1 : 7; // this week: nights up to this morning
   const nights = SLEEP.filter(x => x.ownerId === ownerId && x.sleepSecs != null && x.date >= sunday && x.date <= PD.addDays(sunday, 6));

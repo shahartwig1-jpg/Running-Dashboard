@@ -51,7 +51,14 @@
   // stored start times: the device's local 22:30 Saturday becomes Saturday 22:30Z.
   const wallMs = d => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
 
-  const api = { TZ, israelYMD, addDays, weekdayOf, sundayOf, planWeekKey, labelDate, activityYMD, wallMs };
+  // A week with no runs is a confirmed 0 only if a sync read the runner after the week ended (this week: since it began)
+  // AND that sync's window (fetch-data.js DAYS_BACK = 70 days back from the sync) reached the week's Sunday.
+  // checkedDay: Israel date of the runner's newest fetchedAt, or null. 2 days of margin for the UTC date the sync uses.
+  const SYNC_DAYS = 70;
+  const zeroConfirmed = (checkedDay, sunday, current) =>
+    !!checkedDay && checkedDay >= (current ? sunday : addDays(sunday, 7)) && sunday >= addDays(checkedDay, -(SYNC_DAYS - 2));
+
+  const api = { TZ, israelYMD, addDays, weekdayOf, sundayOf, planWeekKey, labelDate, activityYMD, wallMs, SYNC_DAYS, zeroConfirmed };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.PlanDates = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

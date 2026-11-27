@@ -87,3 +87,29 @@ test("same results whatever time zone the device is set to", () => {
   // Sat 21 Nov is in the week of Sun 15 Nov, so its key is Sat 14 Nov.
   for (const r of results) assert.equal(r, JSON.stringify(["2026-11-21", "2026-11-14", "2026-10-25", 25]));
 });
+
+test("zeroConfirmed: a 0 needs a read after the week and a sync window that reached it", () => {
+  // read on Thu 26 Nov; the sync window reaches back 70 days (68 with margin) -> Sundays from 19 Sep on
+  assert.equal(D.zeroConfirmed("2026-11-26", "2026-11-22", true), true);   // this week, read since Sunday
+  assert.equal(D.zeroConfirmed("2026-11-21", "2026-11-22", true), false);  // this week, last read before it began
+  assert.equal(D.zeroConfirmed("2026-11-26", "2026-11-15", false), true);  // last week, read after it ended
+  assert.equal(D.zeroConfirmed("2026-11-21", "2026-11-15", false), false); // read before the week ended
+  assert.equal(D.zeroConfirmed("2026-11-26", "2026-09-20", false), true);  // 67 days back: inside the window
+  assert.equal(D.zeroConfirmed("2026-11-26", "2026-09-13", false), false); // 74 days back: the sync no longer reads it
+  assert.equal(D.zeroConfirmed(null, "2026-11-22", true), false);          // never read
+});
+
+test("chart week vs stored run times agree in a non-Israel browser", () => {
+  // the page's week = device-local Sunday (weekStart); runs are compared via wallMs (device clock on the stored scale)
+  const script = `const D=require(${JSON.stringify(path.join(__dirname, "..", "plan-dates.js"))});
+    const weekStart = d => { const x = new Date(d); x.setHours(0,0,0,0); x.setDate(x.getDate() - x.getDay()); return x; };
+    const TODAY = new Date(2026, 10, 26, 9, 0); // Thu 26 Nov 09:00 on the device
+    const s = weekStart(TODAY), sunday = s.getFullYear() + "-" + String(s.getMonth() + 1).padStart(2, "0") + "-" + String(s.getDate()).padStart(2, "0");
+    const lo = D.wallMs(s), hi = lo + 7 * 86400000;
+    const inWeek = iso => { const t = Date.parse(iso + "Z"); return t >= lo && t < hi; }; // stored = local wall-clock as UTC
+    console.log(JSON.stringify([sunday, inWeek("2026-11-21T22:30:00"), inWeek("2026-11-22T00:30:00"), inWeek("2026-11-28T23:50:00")]));`;
+  for (const tz of ["Asia/Jerusalem", "America/New_York", "UTC", "Pacific/Auckland"]) {
+    const r = execFileSync(process.execPath, ["-e", script], { env: { ...process.env, TZ: tz } }).toString().trim();
+    assert.equal(r, JSON.stringify(["2026-11-22", false, true, true]), tz); // Sat 22:30 is last week; Sun 00:30 and Sat 23:50 this week
+  }
+});
