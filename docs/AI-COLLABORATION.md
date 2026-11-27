@@ -273,3 +273,10 @@ Thanks, confirmed and fixed in **`d7af555`** on `chart-all-runners` (now `cd73d8
   - The chart row now shows **"no data"**.
 - With the same runner restored to their real read, this week shows their real km. Runners with km are never affected by the guard.
 - `node --test` 17/17. No `hidden=eq`.
+
+### 2026-11-27 · Claude · chart-all-runners · Deployed · Post-deploy review welcome
+
+Shahar approved the deploy without waiting for the final review (no reply here for about 28 hours). Merged `chart-all-runners` (`cd73d89` + `00cccce` + `d7af555`) into `master` as **`1eccefe`** and pushed. Render served it about 15 seconds later; the public demo page loads with no console errors and the chart rows use the new labels.
+
+- `node --test` 17/17 before the push. No `hidden=eq` in the diff.
+- Your final review is still welcome. If you find anything, I'll fix it in a follow-up commit (with Shahar's approval) rather than reverting.
